@@ -1,5 +1,5 @@
 # koncertify
-> Concert ticketing that doesn't collapse under pressure and doesn't reward bots.
+> Concert ticketing designed to handle high concurrency and resist bot abuse.
 
 In 2022, Ticketmaster's system failed millions of Taylor Swift fans. Bots bought entire venue allocations in minutes. Queues crashed. Real fans got nothing.
 
@@ -9,19 +9,20 @@ Koncertify is built around the premise that this is an engineering problem, not 
 
 ## The Problem
 High-demand concert ticketing breaks in two specific ways:
-<b>1. Scale failures</b> — systems collapse when hundreds of thousands of users hit them simultaneously. Queue systems fail, databases lock, tickets get oversold.
-<b>2. Bot exploitation</b> — automated buyers acquire tickets in milliseconds, reselling them at 10x face value. Real fans never had a chance.
+### 1. Scale failures
+Systems collapse when hundreds of thousands of users hit simultaneously. Databases lock, queues fail, and tickets get oversold.
 
+### 2. Bot exploitation
+Automated buyers acquire tickets in milliseconds and resell at extreme markups. Real users lose access.
 Both are solvable. Most ticketing platforms just haven't prioritised solving them.
 
 ---
 
-## What Koncertify Does Differently
-Guaranteed ticket atomicity — a ticket is either fully reserved with payment confirmed, or the reservation never happened. No half-states. No double-sells. No money disappearing.
-Concurrency-safe queue system — built to handle extreme simultaneous load without collapsing. Every user gets a fair position in a verifiable queue.
-Bot detection and prevention — rate limiting, device fingerprinting, and behavioral analysis to ensure real humans get real tickets.
-Load tested — not just built for scale, but actually tested at scale. Simulated concurrent user loads with documented results.
-
+## What Koncertify Aims to Solve
+- **Atomic ticketing** — ensuring tickets are either fully booked or not at all, preventing double-sells  
+- **Concurrency-safe queuing** — handling high simultaneous demand without system collapse  
+- **Bot resistance** — rate limiting and behavioral checks to prioritize real users  
+- **Load-tested design** — validating behavior under simulated high traffic  
 ---
 
 
@@ -32,12 +33,22 @@ Load tested — not just built for scale, but actually tested at scale. Simulate
 
 ## Tech Stack
 - Backend — Java / Spring Boot
-- Queue System — Redis
+- Queue System — Redis (planned)  
 - Database — PostgreSQL
 - Payments — Stripe (atomic transaction handling)
 - Frontend — React / Next.js
 - Load Testing — Locust or JMeter
 - Containerisation — Docker
+
+---
+
+## Engineering Focus
+
+- Concurrency control (optimistic vs pessimistic locking)
+- Idempotent booking APIs
+- Distributed queue design
+- Failure handling under load
+- Preventing race conditions in seat allocation
 
 ---
 
@@ -69,7 +80,7 @@ Target: System stability under 1000 concurrent users with zero double-sells.
 
 
 ## Why This Exists
-Built out of genuine frustration with how badly existing ticketing infrastructure handles the two problems that matter most — fairness and reliability. Studied the Ticketmaster failures in detail. Built something better.
+Built out of genuine frustration with how badly existing ticketing infrastructure handles the two problems that matter most — fairness and reliability. Studied the Ticketmaster failures in detail. Working toward a system that handles these problems correctly.
 
 ---
 
@@ -86,5 +97,7 @@ Open to collaborators. Especially interested in anyone with experience in distri
 ---
 
 
-## License
-MIT
+## Copyright
+Copyright © 2026 Meghna Ravikumar.
+All rights reserved.
+No part of this software may be reproduced or distributed without permission.
