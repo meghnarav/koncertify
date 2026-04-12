@@ -93,11 +93,3 @@ Built out of genuine frustration with how badly existing ticketing infrastructur
 
 ## Contributing
 Open to collaborators. Especially interested in anyone with experience in distributed systems, payment infrastructure, or fraud detection.
-
----
-
-
-## Copyright
-Copyright © 2026 Meghna Ravikumar.
-All rights reserved.
-No part of this software may be reproduced or distributed without permission.
