@@ -39,7 +39,7 @@ class Section{
             return;
         } 
         
-        seat[targetIndex].bookSeat();
+        seats[targetIndex].bookSeat();
     }
 }
 
