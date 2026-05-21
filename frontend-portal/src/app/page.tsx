@@ -8,7 +8,7 @@ export default function Home() {
 
   useEffect(() => {
     // Verifies connectivity to the Spring Boot Actuator endpoint
-    fetch("http://localhost:8080/actuator/health")
+    fetch("koncertify-production.up.railway.app/actuator/health")
       .then((res) => (res.ok ? setBackendStatus("CONNECTED") : setBackendStatus("ERROR")))
       .catch(() => setBackendStatus("OFFLINE"))
       .finally(() => setLoading(false));
