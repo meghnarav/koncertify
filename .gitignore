@@ -1,0 +1,10 @@
+# Ignore heavy frontend node dependencies
+**/node_modules/
+**/.next/
+**/out/
+
+# Ignore backend build files
+**/target/
+**/.mvn/
+**/mvnw
+**/mvnw.cmd
