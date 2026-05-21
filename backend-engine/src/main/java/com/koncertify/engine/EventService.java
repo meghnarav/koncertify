@@ -16,16 +16,13 @@ public class EventService {
 
     @Transactional
     public Event createEvent(String title, LocalDateTime date, int seatCount) {
-        // 1. Create and Save the Event
         Event event = new Event(title, date);
         event = eventRepository.save(event);
 
-        // 2. Generate Seats linked to this Event
         for (int i = 1; i <= seatCount; i++) {
             Seat seat = new Seat("S-" + i, event);
             seatRepository.save(seat);
         }
-        
         return event;
     }
 }

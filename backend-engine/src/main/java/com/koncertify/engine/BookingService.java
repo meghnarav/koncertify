@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -31,28 +30,26 @@ public class BookingService {
             for (Long seatNum : seatNums) {
                 String lockKey = "lock:seat:" + seatNum;
                 Boolean success = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", Duration.ofSeconds(10));
-                
-                if (success != null && success) {
+                if (Boolean.TRUE.equals(success)) {
                     acquiredLocks.add(lockKey);
                 } else {
-                    throw new RuntimeException("Seat " + seatNum + " is currently being processed by another user.");
+                    throw new RuntimeException("Seat " + seatNum + " is currently locked.");
                 }
             }
 
             for (Long seatNum : seatNums) {
-                Optional<Seat> optionalSeat = seatRepository.findById(seatNum);
-                Seat seat = optionalSeat.orElseGet(() -> new Seat(seatNum));
+                // Fetch the existing seat. If not found, throw error.
+                Seat seat = seatRepository.findById(seatNum)
+                        .orElseThrow(() -> new RuntimeException("Seat " + seatNum + " does not exist."));
 
-                boolean isStateFlipped = seat.bookSeat();
-                if (!isStateFlipped) {
-                    throw new RuntimeException("Seat " + seatNum + " is already fully booked.");
+                if (!seat.bookSeat()) {
+                    throw new RuntimeException("Seat " + seatNum + " is already booked.");
                 }
                 seatRepository.save(seat);
             }
 
             String confirmationCode = "KNC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
             Order order = new Order(request.getEmail(), confirmationCode, seatNums);
-            
             return orderRepository.save(order);
 
         } finally {

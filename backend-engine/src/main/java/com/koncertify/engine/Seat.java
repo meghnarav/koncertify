@@ -10,26 +10,30 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
     private String seatLabel;
+    
     private boolean isBooked = false;
 
     @ManyToOne
     @JoinColumn(name = "event_id")
     private Event event;
 
-    // Constructors
+    // Default constructor (required by JPA)
     public Seat() {}
 
+    // Constructor used by SeatController (to find/manage existing seats)
     public Seat(Long id) {
         this.id = id;
     }
 
+    // Constructor used by EventService (to create new seats)
     public Seat(String seatLabel, Event event) {
         this.seatLabel = seatLabel;
         this.event = event;
     }
 
-    // Business Logic
+    // Business Logic (needed by BookingService and SeatController)
     public boolean bookSeat() {
         if (!this.isBooked) {
             this.isBooked = true;
