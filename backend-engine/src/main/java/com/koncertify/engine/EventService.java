@@ -19,11 +19,13 @@ public class EventService {
         Event event = new Event(title, date);
         event = eventRepository.save(event);
 
-        // Inside EventService.java
         for (int i = 1; i <= seatCount; i++) {
-            // Example: Number "1", Label "S-1"
-            Seat seat = new Seat(String.valueOf(i), "S-" + i, event); 
+            // Use the new constructor: Seat(String number, String label, Event event)
+            Seat seat = new Seat(String.valueOf(i), "S-" + i, event);
             seatRepository.save(seat);
         }
-    }
+        
+        // THIS RETURN WAS MISSING, causing your build error
+        return event; 
+}
 }
