@@ -5,10 +5,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "seats") // Tells PostgreSQL to create a table named "seats"
+@Table(name = "seats")
 public class Seat {
 
-    @Id // Marks this field as the unique Primary Key in the database
+    @Id //unique primary key in db
     private Long seatNumber;
     
     private boolean isBooked = false;

@@ -21,7 +21,7 @@ public class DashboardController {
     public Map<String, Long> getDashboardStats() {
         return Map.of(
             "activeBookings", orderRepository.count(),
-            "availableSeats", seatRepository.countByReservedFalse()
+            "availableSeats", seatRepository.countByIsBookedFalse()
         );
     }
 }

@@ -10,10 +10,8 @@ public class DataInitializer {
     CommandLineRunner initDatabase(SeatRepository seatRepository) {
         return args -> {
             if (seatRepository.count() == 0) {
-                for (int i = 1; i <= 1250; i++) {
-                    Seat seat = new Seat();
-                    seat.setReserved(false); // Initially, all seats are free
-                    seatRepository.save(seat);
+                for (long i = 1; i <= 1250; i++) {
+                    seatRepository.save(new Seat(i));
                 }
                 System.out.println("--- 1,250 Seats Initialized ---");
             }
