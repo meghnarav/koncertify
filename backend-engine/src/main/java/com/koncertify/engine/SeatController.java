@@ -15,11 +15,9 @@ public class SeatController {
 
     @GetMapping
     public List<Seat> getAllSeats() {
-        // If your database is empty, generate a few test seats 
+        // If your database is empty, provide a cleaner way to initialize or just return empty
         if (seatRepository.count() == 0) {
-            seatRepository.save(new Seat(1L));
-            seatRepository.save(new Seat(2L));
-            seatRepository.save(new Seat(3L));
+            return List.of(); // Return an empty list instead of trying to save invalid data
         }
         return seatRepository.findAll();
     }
