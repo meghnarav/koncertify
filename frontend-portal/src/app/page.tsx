@@ -7,8 +7,18 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Verifies connectivity to the Spring Boot Actuator endpoint
-    fetch("koncertify-backend.onrender.com/actuator/health")
+    // Dynamically uses environment variables or falls back to an absolute production URL string
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 
+                    process.env.REACT_APP_API_URL || 
+                    import.meta.env.VITE_API_BASE_URL || 
+                    "https://koncertify-backend.onrender.com";
+
+    // Ensures clean layout joins regardless of trailing slash configurations
+    const targetUrl = baseUrl.endsWith("/") 
+      ? `${baseUrl}actuator/health` 
+      : `${baseUrl}/actuator/health`;
+
+    fetch(targetUrl)
       .then((res) => (res.ok ? setBackendStatus("CONNECTED") : setBackendStatus("ERROR")))
       .catch(() => setBackendStatus("OFFLINE"))
       .finally(() => setLoading(false));
