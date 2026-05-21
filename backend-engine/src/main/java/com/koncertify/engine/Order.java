@@ -29,6 +29,15 @@ public class Order {
         this.bookingTime = LocalDateTime.now();
     }
 
+    // Add this to your Order.java class
+    @ManyToOne
+    @JoinColumn(name = "event_id") // This must match your DB column
+    private Event event;
+
+    // Add getter/setter
+    public Event getEvent() { return event; }
+    public void setEvent(Event event) { this.event = event; }
+
     public Long getId() { return id; }
     public String getUserEmail() { return userEmail; }
     public void setUserEmail(String userEmail) { this.userEmail = userEmail; }

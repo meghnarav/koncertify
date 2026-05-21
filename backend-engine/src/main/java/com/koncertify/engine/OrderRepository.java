@@ -5,5 +5,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
-    // Inherits built-in save capabilities for our confirmation records
+    long countByEventId(Long eventId);
 }

@@ -30,7 +30,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/organizer/**").hasAuthority("ROLE_ORGANIZER")
                 .requestMatchers("/api/bookings/**").hasAuthority("ROLE_CUSTOMER")
                 .requestMatchers("/api/events/**").permitAll() // Anyone can browse
-            )
+            );
 
         return http.build();
     }
