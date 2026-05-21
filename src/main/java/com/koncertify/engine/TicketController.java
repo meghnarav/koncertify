@@ -1,8 +1,11 @@
 package com.koncertify.engine;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -18,36 +21,43 @@ public class TicketController {
     }
 
     @PostMapping("/book")
-    public String purchaseTicket(@RequestParam Long seatNum) {
-        String lockKey = "lock:seat:" + seatNum;
-
-        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", Duration.ofSeconds(10));
-
-        if (lockAcquired == null || !lockAcquired) {
-            return "Error: Transaction Failed. Seat " + seatNum + " is currently processing in another user's checkout queue.";
-        }
+    @Transactional
+    public String purchaseTickets(@RequestParam List<Long> seatNums) {
+        List<String> acquiredLocks = new ArrayList<>();
 
         try {
-            Optional<Seat> optionalSeat = seatRepository.findById(seatNum);
-            Seat seat;
-
-            if (optionalSeat.isPresent()) {
-                seat = optionalSeat.get();
-            } else {
-                seat = new Seat(seatNum);
+            for (Long seatNum : seatNums) {
+                String lockKey = "lock:seat:" + seatNum;
+                Boolean success = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", Duration.ofSeconds(10));
+                
+                if (success != null && success) {
+                    acquiredLocks.add(lockKey);
+                } else {
+                    throw new RuntimeException("Seat " + seatNum + " is currently processing in another queue.");
+                }
             }
 
-            boolean success = seat.bookSeat();
+            for (Long seatNum : seatNums) {
+                Optional<Seat> optionalSeat = seatRepository.findById(seatNum);
+                Seat seat = optionalSeat.orElseGet(() -> new Seat(seatNum));
 
-            if (success) {
+                boolean isStateFlipped = seat.bookSeat();
+
+                if (!isStateFlipped) {
+                    throw new RuntimeException("Seat " + seatNum + " is already permanently booked.");
+                }
+
                 seatRepository.save(seat);
-                return "Success: Seat " + seatNum + " has been locked, verified, and saved to the database!";
-            } else {
-                return "Error: Seat " + seatNum + " is already completely booked.";
             }
 
+            return "Success: Seats " + seatNums + " have been successfully reserved!";
+
+        } catch (RuntimeException e) {
+            throw e; 
         } finally {
-            redisTemplate.delete(lockKey);
+            for (String lockKey : acquiredLocks) {
+                redisTemplate.delete(lockKey);
+            }
         }
     }
 }
