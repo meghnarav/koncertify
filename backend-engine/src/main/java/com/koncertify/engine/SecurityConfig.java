@@ -26,10 +26,10 @@ public class SecurityConfig {
             
             // 3. Permit all incoming requests entirely to clear out security walls
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")
-                .requestMatchers("/api/bookings/**").authenticated() // Customers
-                .anyRequest().permitAll() // Public concert listings
+                .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                .requestMatchers("/api/organizer/**").hasAuthority("ROLE_ORGANIZER")
+                .requestMatchers("/api/bookings/**").hasAuthority("ROLE_CUSTOMER")
+                .requestMatchers("/api/events/**").permitAll() // Anyone can browse
             )
 
         return http.build();

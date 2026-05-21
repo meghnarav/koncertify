@@ -17,11 +17,11 @@ public class DashboardController {
     @Autowired
     private SeatRepository seatRepository;
 
-    @GetMapping("/stats")
-    public Map<String, Long> getDashboardStats() {
+    @GetMapping("/stats/{eventId}")
+    public Map<String, Long> getEventStats(@PathVariable Long eventId) {
         return Map.of(
-            "activeBookings", orderRepository.count(),
-            "availableSeats", seatRepository.countByIsBookedFalse()
+            "totalBookings", orderRepository.countByEventId(eventId),
+            "availableSeats", seatRepository.countByEventIdAndIsBookedFalse(eventId)
         );
     }
 }

@@ -5,5 +5,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface SeatRepository extends JpaRepository<Seat, Long> {
-    long countByIsBookedFalse();
+    List<Seat> findByEventId(Long eventId);
+    Optional<Seat> findByIdAndEventId(Long id, Long eventId);
+    long countByEventIdAndIsBookedFalse(Long eventId);
 }
