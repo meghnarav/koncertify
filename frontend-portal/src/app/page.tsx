@@ -7,13 +7,10 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Dynamically uses environment variables or falls back to an absolute production URL string
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 
-                    process.env.REACT_APP_API_URL || 
-                    import.meta.env.VITE_API_BASE_URL || 
-                    "https://koncertify-backend.onrender.com";
+    // Safely reads the Next.js environment variable, or falls back to the absolute URL string
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
 
-    // Ensures clean layout joins regardless of trailing slash configurations
+    // Ensures clean joins regardless of whether the base URL has a trailing slash
     const targetUrl = baseUrl.endsWith("/") 
       ? `${baseUrl}actuator/health` 
       : `${baseUrl}/actuator/health`;
