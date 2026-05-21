@@ -10,7 +10,11 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Mapping to the specific column in your database
     @Column(name = "seat_number", nullable = false)
+    private String seatNumber;
+
+    @Column(name = "seat_label", nullable = false)
     private String seatLabel;
     
     private boolean isBooked = false;
@@ -22,18 +26,15 @@ public class Seat {
     // Default constructor (required by JPA)
     public Seat() {}
 
-    // Constructor used by SeatController (to find/manage existing seats)
-    public Seat(Long id) {
-        this.id = id;
-    }
-
-    // Constructor used by EventService (to create new seats)
-    public Seat(String seatLabel, Event event) {
+    // Constructor for creating new seats
+    public Seat(String seatNumber, String seatLabel, Event event) {
+        this.seatNumber = seatNumber;
         this.seatLabel = seatLabel;
         this.event = event;
+        this.isBooked = false;
     }
 
-    // Business Logic (needed by BookingService and SeatController)
+    // Business Logic
     public boolean bookSeat() {
         if (!this.isBooked) {
             this.isBooked = true;
@@ -45,6 +46,9 @@ public class Seat {
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    
+    public String getSeatNumber() { return seatNumber; }
+    public void setSeatNumber(String seatNumber) { this.seatNumber = seatNumber; }
     
     public String getSeatLabel() { return seatLabel; }
     public void setSeatLabel(String seatLabel) { this.seatLabel = seatLabel; }

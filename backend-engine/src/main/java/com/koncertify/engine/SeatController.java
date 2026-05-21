@@ -15,10 +15,7 @@ public class SeatController {
 
     @GetMapping
     public List<Seat> getAllSeats() {
-        // If your database is empty, provide a cleaner way to initialize or just return empty
-        if (seatRepository.count() == 0) {
-            return List.of(); // Return an empty list instead of trying to save invalid data
-        }
+        // REMOVE the manual save() logic entirely
         return seatRepository.findAll();
     }
 

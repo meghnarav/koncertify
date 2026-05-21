@@ -19,10 +19,11 @@ public class EventService {
         Event event = new Event(title, date);
         event = eventRepository.save(event);
 
+        // Inside EventService.java
         for (int i = 1; i <= seatCount; i++) {
-            Seat seat = new Seat("S-" + i, event);
+            // Example: Number "1", Label "S-1"
+            Seat seat = new Seat(String.valueOf(i), "S-" + i, event); 
             seatRepository.save(seat);
         }
-        return event;
     }
 }
