@@ -1,25 +1,25 @@
 package com.koncertify.engine;
 
 import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {
 
-    @Autowired
-    private OrderRepository orderRepository;
+    private final SeatRepository seatRepository;
+    private final BookingRepository bookingRepository;
 
-    @Autowired
-    private SeatRepository seatRepository;
+    public DashboardController(SeatRepository seatRepository, BookingRepository bookingRepository) {
+        this.seatRepository = seatRepository;
+        this.bookingRepository = bookingRepository;
+    }
 
     @GetMapping("/stats/{eventId}")
-    public Map<String, Long> getEventStats(@PathVariable Long eventId) {
+    public Map<String, Long> getStats(@PathVariable Long eventId) {
         return Map.of(
-            "totalBookings", orderRepository.countByEventId(eventId),
-            "availableSeats", seatRepository.countByEvent_IdAndIsBookedFalse(eventId)
+            "activeBookings", bookingRepository.count(),
+            "availableSeats", seatRepository.countByEventIdAndIsBookedFalse(eventId)
         );
     }
 }
