@@ -25,7 +25,6 @@ public class EventService {
             seatRepository.save(seat);
         }
         
-        // THIS RETURN WAS MISSING, causing your build error
         return event; 
 }
 }
