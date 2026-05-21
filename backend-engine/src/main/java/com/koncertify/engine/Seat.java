@@ -10,7 +10,7 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "seat_number", nullable = false)
     private String seatLabel;
     
     private boolean isBooked = false;
