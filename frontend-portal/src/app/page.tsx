@@ -10,10 +10,10 @@ export default function Home() {
     // Safely reads the Next.js environment variable, or falls back to the absolute URL string
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
 
-    // Ensures clean joins regardless of whether the base URL has a trailing slash
+    // Replaced /actuator/health with /api/health to utilize the MVC CORS filter layout
     const targetUrl = baseUrl.endsWith("/") 
-      ? `${baseUrl}actuator/health` 
-      : `${baseUrl}/actuator/health`;
+      ? `${baseUrl}api/health` 
+      : `${baseUrl}/api/health`;
 
     fetch(targetUrl)
       .then((res) => (res.ok ? setBackendStatus("CONNECTED") : setBackendStatus("ERROR")))
