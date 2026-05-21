@@ -15,7 +15,7 @@ public class CorsConfig {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
                         .allowedOrigins(
-                            "https://your-frontend-name.vercel.app", // Your production Vercel URL
+                            "https://koncert-ify.vercel.app", // Your production Vercel URL
                             "http://localhost:3000"                  // Local frontend development
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
