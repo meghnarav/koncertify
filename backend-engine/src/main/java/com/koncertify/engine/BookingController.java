@@ -7,6 +7,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/bookings")
+@CrossOrigin(origins = "https://koncert-ify.vercel.app") // Crucial: Allows your Vercel frontend to read this data
 public class BookingController {
 
     private final BookingService bookingService;
@@ -30,7 +31,6 @@ public class BookingController {
     public ResponseEntity<Map<String, Long>> getDashboardSummary() {
         Map<String, Long> summary = new HashMap<>();
         summary.put("activeBookings", bookingRepository.count());
-        // This will now match the method added to the repository above
         summary.put("availableSeats", seatRepository.countByIsBookedFalse());
         
         return ResponseEntity.ok(summary);

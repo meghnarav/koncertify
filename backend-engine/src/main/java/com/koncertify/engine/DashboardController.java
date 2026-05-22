@@ -5,6 +5,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dashboard")
+@CrossOrigin(origins = "https://koncert-ify.vercel.app") // Crucial: Keeps your dashboard endpoints uniform
 public class DashboardController {
 
     private final SeatRepository seatRepository;
