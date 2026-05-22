@@ -19,18 +19,16 @@ public class Seat {
     private String seatLabel;
     
     @Column(name = "is_booked", nullable = false)
-    @JsonProperty("isBooked") // Forces Jackson to serialize exactly as "isBooked"
+    @JsonProperty("isBooked") // Forces Jackson to output "isBooked" in JSON
     private boolean isBooked = false;
 
     @ManyToOne
     @JoinColumn(name = "event_id")
-    @JsonIgnoreProperties("seats") // Stops the infinite loop
+    @JsonIgnoreProperties("seats")
     private Event event;
 
-    // Default constructor (required by JPA)
     public Seat() {}
 
-    // Constructor for creating new seats
     public Seat(String seatNumber, String seatLabel, Event event) {
         this.seatNumber = seatNumber;
         this.seatLabel = seatLabel;
@@ -38,7 +36,6 @@ public class Seat {
         this.isBooked = false;
     }
 
-    // Business Logic
     public boolean bookSeat() {
         if (!this.isBooked) {
             this.isBooked = true;
@@ -47,7 +44,6 @@ public class Seat {
         return false;
     }
 
-    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     
