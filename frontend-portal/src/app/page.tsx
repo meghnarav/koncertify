@@ -21,7 +21,12 @@ export default function Home() {
       .finally(() => setLoading(false));
 
     const fetchMetrics = () => {
-      fetch(`${baseUrl}/api/bookings/summary`)
+      fetch(`${baseUrl}/api/bookings/summary?t=${Date.now()}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
         .then((res) => {
           if (!res.ok) {
             throw new Error(`HTTP Error: ${res.status}`);
@@ -30,9 +35,11 @@ export default function Home() {
         })
         .then((data) => {
           if (data) {
+            console.log("Live backend metrics snapshot:", data);
+            
             setStats({
-              activeBookings: data.activeBookings ?? 0,
-              availableSeats: data.availableSeats ?? 0
+              activeBookings: data.activeBookings ?? data.active_bookings ?? 0,
+              availableSeats: data.availableSeats ?? data.available_seats ?? 0
             });
           }
         })
