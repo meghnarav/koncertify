@@ -32,4 +32,17 @@ public class SeatController {
             })
             .orElse("Seat ID " + id + " not found.");
     }
+
+    @PostMapping("/reset-bulk")
+    public ResponseEntity<String> resetSeatsBulk(@RequestBody List<Long> seatIds) {
+        List<Seat> seatsToReset = seatRepository.findAllById(seatIds);
+        
+        for (Seat seat : seatsToReset) {
+            // Assuming your Seat entity exposes an unbook / reset method
+            seat.setIsBooked(false); 
+        }
+        
+        seatRepository.saveAll(seatsToReset);
+        return ResponseEntity.ok("Seats " + seatIds + " have been successfully reset to available.");
+    }
 }
