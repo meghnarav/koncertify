@@ -30,7 +30,7 @@ public class BookingController {
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Long>> getDashboardSummary() {
         Map<String, Long> summary = new HashMap<>();
-        summary.put("activeBookings", bookingRepository.count());
+        summary.put("activeBookings", seatRepository.countByIsBookedTrue());
         summary.put("availableSeats", seatRepository.countByIsBookedFalse());
         
         return ResponseEntity.ok(summary);
