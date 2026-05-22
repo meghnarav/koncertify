@@ -104,7 +104,7 @@ export default function Home() {
 
     try {
       // Fallback network call to your reset endpoint (if deployed)
-      const res = await fetch(`${baseUrl}/api/seats/reset-bulk`, {
+      const res = await fetch(`${baseUrl}/api/seats/reset-all`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify([1, 2, 3, 4, 5]) // Target seed values

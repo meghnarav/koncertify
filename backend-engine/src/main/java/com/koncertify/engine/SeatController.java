@@ -1,6 +1,7 @@
 package com.koncertify.engine;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity; // ◄ Added missing import to fix compilation error
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -33,16 +34,29 @@ public class SeatController {
             .orElse("Seat ID " + id + " not found.");
     }
 
+    // Fixed endpoint: Bulk reset specific IDs
     @PostMapping("/reset-bulk")
     public ResponseEntity<String> resetSeatsBulk(@RequestBody List<Long> seatIds) {
         List<Seat> seatsToReset = seatRepository.findAllById(seatIds);
         
         for (Seat seat : seatsToReset) {
-            // Assuming your Seat entity exposes an unbook / reset method
-            seat.setIsBooked(false); 
+            seat.setBooked(false); // Using your exact entity field name 'booked' matching your DB schema
         }
         
         seatRepository.saveAll(seatsToReset);
         return ResponseEntity.ok("Seats " + seatIds + " have been successfully reset to available.");
+    }
+
+    // Added endpoint: Clear every seat instantly from the frontend button
+    @PostMapping("/reset-all")
+    public ResponseEntity<String> resetAllSeats() {
+        List<Seat> allSeats = seatRepository.findAll();
+        
+        for (Seat seat : allSeats) {
+            seat.setBooked(false);
+        }
+        
+        seatRepository.saveAll(allSeats);
+        return ResponseEntity.ok("All operational seats reset back to base metrics successfully.");
     }
 }
