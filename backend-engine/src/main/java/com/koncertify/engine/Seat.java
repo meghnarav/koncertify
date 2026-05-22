@@ -1,6 +1,7 @@
 package com.koncertify.engine;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
@@ -18,11 +19,12 @@ public class Seat {
     private String seatLabel;
     
     @Column(name = "is_booked", nullable = false)
+    @JsonProperty("isBooked") // Forces Jackson to serialize exactly as "isBooked"
     private boolean isBooked = false;
 
     @ManyToOne
     @JoinColumn(name = "event_id")
-    @JsonIgnoreProperties("seats") // This stops the infinite JSON loop back to Event -> seats
+    @JsonIgnoreProperties("seats") // Stops the infinite loop
     private Event event;
 
     // Default constructor (required by JPA)
