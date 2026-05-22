@@ -12,14 +12,12 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<DashboardStats>({ activeBookings: 0, availableSeats: 0 });
   
-  // New UI states for booking interactions
   const [seatInput, setSeatInput] = useState<string>("");
   const [actionMessage, setActionMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
 
-  // Isolated metrics fetching function so we can manually trigger refreshes
   const fetchMetrics = () => {
     fetch(`${baseUrl}/api/bookings/summary?t=${Date.now()}`, {
       headers: {
@@ -55,7 +53,6 @@ export default function Home() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Handler for Single & Bulk Booking using existing single-booking endpoint
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!seatInput.trim()) return;
@@ -63,39 +60,45 @@ export default function Home() {
     setIsProcessing(true);
     setActionMessage(null);
 
-    // Extract numbers from inputs like "1, 2, 3" or "4"
     const idsToBook = seatInput
       .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id !== "" && !isNaN(Number(id)));
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((id) => !isNaN(id));
 
     if (idsToBook.length === 0) {
-      setActionMessage({ text: "Please enter valid numeric seat IDs separated by commas.", isError: true });
+      setActionMessage({ text: "Please enter valid numeric seat IDs.", isError: true });
       setIsProcessing(false);
       return;
     }
 
     try {
-      // Execute individual booking calls concurrently 
-      const requests = idsToBook.map((id) => 
-        fetch(`${baseUrl}/api/seats/${id}/book`, { method: "POST" }).then((res) => {
-          if (!res.ok) throw new Error(`Seat ${id} failed`);
-          return res.text();
-        })
-      );
+      const res = await fetch(`${baseUrl}/api/seats/book-bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(idsToBook)
+      });
 
-      await Promise.all(requests);
-      setActionMessage({ text: `Successfully processed booking for seat(s): ${idsToBook.join(", ")}`, isError: false });
-      setSeatInput("");
-      fetchMetrics(); // Instant UI refresh
-    } catch (err: any) {
-      setActionMessage({ text: "One or more bookings failed. Verify if seats are already taken.", isError: true });
+      const messageText = await res.text();
+
+      if (res.ok) {
+        setActionMessage({ text: messageText, isError: false });
+        setSeatInput("");
+      } else {
+        setActionMessage({ 
+          text: messageText.includes("Transaction aborted") 
+            ? messageText 
+            : "Transaction rolled back. One or more seats were already taken.", 
+          isError: true 
+        });
+      }
+      fetchMetrics();
+    } catch (err) {
+      setActionMessage({ text: "Network layout routing error during atomic request.", isError: true });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Handler to clear or simulate a full reset (requires backend reset or manual SQL fallback)
   const handleResetSystem = async () => {
     if (!window.confirm("Are you sure you want to trigger an administrative reset on all seats?")) return;
 
@@ -103,20 +106,23 @@ export default function Home() {
     setActionMessage(null);
 
     try {
-      // Fallback network call to your reset endpoint (if deployed)
+      // Corrected Fetch Call: No payload body, custom header alignment
       const res = await fetch(`${baseUrl}/api/seats/reset-all`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([1, 2, 3, 4, 5]) // Target seed values
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
       });
 
+      const messageText = await res.text();
+
       if (res.ok) {
-        setActionMessage({ text: "System seat cache reset completed.", isError: false });
+        setActionMessage({ text: messageText, isError: false });
       } else {
-        // Human feedback reminder if the SQL statement is still required
         setActionMessage({ 
-          text: "Reset command sent. If counts don't change, apply 'UPDATE seats SET is_booked = false;' in your psql shell.", 
-          isError: false 
+          text: messageText || `Reset dropped with status error: ${res.status}`, 
+          isError: true 
         });
       }
       fetchMetrics();
@@ -149,7 +155,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Metrics Row */}
       <main className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mb-10">
         <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
           <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Active Bookings</h3>
@@ -166,7 +171,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Action Operations Panel */}
       <section className="max-w-4xl bg-slate-800/50 border border-slate-800 rounded-xl p-6">
         <h2 className="text-xl font-bold text-white mb-4">Operations Deck</h2>
         
@@ -178,7 +182,7 @@ export default function Home() {
             <div className="flex gap-3">
               <input
                 type="text"
-                placeholder="e.g. 1, 2, 3, 5"
+                placeholder="e.g. 1, 2, 3"
                 value={seatInput}
                 onChange={(e) => setSeatInput(e.target.value)}
                 disabled={isProcessing}
@@ -195,7 +199,6 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Action Message Center */}
         {actionMessage && (
           <div className={`mt-4 p-3 text-sm rounded-lg border max-w-xl ${
             actionMessage.isError 
@@ -208,7 +211,6 @@ export default function Home() {
 
         <hr className="border-slate-800 my-6" />
 
-        {/* Admin Section */}
         <div>
           <h3 className="text-sm font-semibold text-rose-400 uppercase tracking-wider mb-2">Danger Zone</h3>
           <p className="text-sm text-slate-400 mb-4">Reset operational variables and restore total system availability parameters.</p>

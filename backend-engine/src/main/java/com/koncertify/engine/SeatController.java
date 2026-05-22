@@ -1,13 +1,14 @@
 package com.koncertify.engine;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity; // ◄ Added missing import to fix compilation error
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional; 
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/seats")
-@CrossOrigin(origins = "https://koncert-ify.vercel.app") // Enables your dashboard to fetch data safely
+@CrossOrigin(origins = "https://koncert-ify.vercel.app", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST})
 public class SeatController {
 
     @Autowired
@@ -58,5 +59,31 @@ public class SeatController {
         
         seatRepository.saveAll(allSeats);
         return ResponseEntity.ok("All operational seats reset back to base metrics successfully.");
+    }
+
+    @PostMapping("/book-bulk")
+    @Transactional // ◄ Forces "All or Nothing". Any exception rolls back the whole batch.
+    public ResponseEntity<String> bookSeatsBulk(@RequestBody List<Long> seatIds) {
+        List<Seat> requestedSeats = seatRepository.findAllById(seatIds);
+
+        // Validation check 1: Ensure all IDs provided match actual records
+        if (requestedSeats.size() != seatIds.size()) {
+            throw new RuntimeException("Booking failed: One or more requested Seat IDs do not exist.");
+        }
+
+        // Validation check 2: Check if ANY seat in the batch is already booked
+        for (Seat seat : requestedSeats) {
+            if (seat.isBooked()) { // Adjust to your entity's boolean check method if different
+                throw new RuntimeException("Transaction aborted: Seat " + seat.getSeatNumber() + " is already taken.");
+            }
+        }
+
+        // Action: If all are clear, book them all safely
+        for (Seat seat : requestedSeats) {
+            seat.setBooked(true);
+        }
+        
+        seatRepository.saveAll(requestedSeats);
+        return ResponseEntity.ok("Successfully reserved all requested seats: " + seatIds);
     }
 }
