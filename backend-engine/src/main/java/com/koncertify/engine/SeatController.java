@@ -1,35 +1,35 @@
 package com.koncertify.engine;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/seats")
+@CrossOrigin(origins = "https://koncert-ify.vercel.app") // Enables your dashboard to fetch data safely
 public class SeatController {
 
     @Autowired
     private SeatRepository seatRepository;
 
+    // Fetch all seats (booked and available) so the dashboard counts metrics correctly
     @GetMapping
     public List<Seat> getAllSeats() {
-        // REMOVE the manual save() logic entirely
         return seatRepository.findAll();
     }
 
-    @org.springframework.web.bind.annotation.PostMapping("/{seatNumber}/book")
-    public String bookSeat(@org.springframework.web.bind.annotation.PathVariable Long seatNumber) {
-        return seatRepository.findById(seatNumber)
+    // Handles the booking sequence securely via the Row ID
+    @PostMapping("/{id}/book")
+    public String bookSeat(@PathVariable Long id) {
+        return seatRepository.findById(id)
             .map(seat -> {
                 if (seat.bookSeat()) { 
-                    seatRepository.save(seat); // Saves the updated state 
-                    return "Seat " + seatNumber + " successfully booked!";
+                    seatRepository.save(seat); // Persists isBooked = true to the database
+                    return "Seat " + seat.getSeatNumber() + " successfully booked!";
                 } else {
-                    return "Seat " + seatNumber + " is already booked.";
+                    return "Seat " + seat.getSeatNumber() + " is already booked.";
                 }
             })
-            .orElse("Seat " + seatNumber + " not found.");
+            .orElse("Seat ID " + id + " not found.");
     }
 }
