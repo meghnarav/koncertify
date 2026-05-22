@@ -10,13 +10,13 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Mapping to the specific column in your database
     @Column(name = "seat_number", nullable = false)
     private String seatNumber;
 
-    @Column(name = "seat_label", nullable = false)
+    @Column(name = "seat_label", nullable = true) 
     private String seatLabel;
     
+    @Column(name = "is_booked", nullable = false)
     private boolean isBooked = false;
 
     @ManyToOne
