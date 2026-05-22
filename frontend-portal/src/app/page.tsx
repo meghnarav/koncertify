@@ -15,32 +15,37 @@ export default function Home() {
   useEffect(() => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
 
-    // Call 1: Backend Engine Health Check
     fetch(`${baseUrl}/api/health`)
       .then((res) => (res.ok ? setBackendStatus("CONNECTED") : setBackendStatus("ERROR")))
       .catch(() => setBackendStatus("OFFLINE"))
       .finally(() => setLoading(false));
 
-    // Call 2: Summary Metrics (Guarded to prevent parsing crashes)
-    fetch(`${baseUrl}/api/bookings/summary`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP Error: Backend responded with status code ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          console.log("Summary data loaded successfully:", data);
-          setStats({
-            activeBookings: data.activeBookings ?? 0,
-            availableSeats: data.availableSeats ?? 0
-          });
-        }
-      })
-      .catch((err) => {
-        console.error("Dashboard failed to populate metrics:", err.message);
-      });
+    const fetchMetrics = () => {
+      fetch(`${baseUrl}/api/bookings/summary`)
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP Error: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (data) {
+            setStats({
+              activeBookings: data.activeBookings ?? 0,
+              availableSeats: data.availableSeats ?? 0
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Dashboard failed to refresh live metrics:", err.message);
+        });
+    };
+
+    fetchMetrics();
+
+    const intervalId = setInterval(fetchMetrics, 5000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
@@ -48,7 +53,7 @@ export default function Home() {
       <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Koncertify Command Center</h1>
-          <p className="text-slate-400 mt-1">Live Transaction Monitor & Seat Operations</p>
+          <p className="text-slate-400 mt-1">Live Transaction Monitor & Seat Operations (Auto-refreshing)</p>
         </div>
         
         <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700">
