@@ -161,7 +161,7 @@ export default function Home() {
 
     try {
       const results = await Promise.all(tasks);
-      const conflictCount = results.filter(r => !r.ok && r.text.includes("CONCURRENCY CONFLICT")).length;
+      const conflictCount = results.filter(r => !r.ok).length;
       const totalSuccess = results.filter(r => r.ok).length;
 
       setStats(prev => ({
@@ -190,8 +190,22 @@ export default function Home() {
   };
 
   const addWorkerGroup = () => {
-    if (batches.length >= 4) return; // Prevent DOM bloat layout breaking
-    setBatches([...batches, { label: `Worker Group ${String.fromCharCode(65 + batches.length)}`, seatsInput: "10, 11", threadsCount: 10 }]);
+    if (batches.length >= 4) return;
+    
+    const existingLabels = batches.map(b => b.label);
+    let nextCharOffset = batches.length;
+    let proposedLabel = `Worker Group ${String.fromCharCode(65 + nextCharOffset)}`;
+    
+    while (existingLabels.includes(proposedLabel) && nextCharOffset < 26) {
+      nextCharOffset++;
+      proposedLabel = `Worker Group ${String.fromCharCode(65 + nextCharOffset)}`;
+    }
+
+    setBatches([...batches, { 
+      label: proposedLabel, 
+      seatsInput: "10, 11", 
+      threadsCount: 10 
+    }]);
   };
 
   const removeWorkerGroup = (index: number) => {
