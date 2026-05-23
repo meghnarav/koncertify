@@ -170,26 +170,33 @@ export default function Home() {
 
       {/* Real-time Seat Matrix Visualization */}
       <section className="bg-slate-900 border border-slate-800 p-6 rounded mb-8">
-        <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">Live Inventory Telemetry Map (IDs 1-100)</h3>
-        <div className="grid grid-cols-10 gap-2 max-w-xl">
-          {Array.from({ length: 100 }).map((_, index) => {
-            const seatId = index + 1;
-            const isBooked = mockBookedList.includes(seatId);
-            return (
-              <div
-                key={seatId}
-                title={`Seat ID: ${seatId}`}
-                className={`h-6 text-[9px] flex items-center justify-center font-bold rounded transition-all border ${
-                  isBooked 
-                    ? "bg-rose-950/80 border-rose-600 text-rose-400" 
-                    : "bg-slate-950 border-slate-800 text-slate-600 hover:border-emerald-500"
-                }`}
-              >
-                {seatId}
-              </div>
-            );
-          })}
+        <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">
+          Live Inventory Telemetry Map (1 to {stats.activeBookings + stats.availableSeats} Seats)
+        </h3>
+        
+        {/* Scrollable responsive box so 1,250 seats look crisp without clogging the viewport */}
+        <div className="max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="grid grid-cols-10 sm:grid-cols-20 md:grid-cols-25 gap-1.5">
+            {Array.from({ length: stats.activeBookings + stats.availableSeats }).map((_, index) => {
+              const seatId = index + 1;
+              const isBooked = mockBookedList.includes(seatId);
+              return (
+                <div
+                  key={seatId}
+                  title={`Seat ID: ${seatId}`}
+                  className={`h-5 text-[8px] flex items-center justify-center font-bold rounded select-none transition-all border ${
+                    isBooked 
+                      ? "bg-rose-950/80 border-rose-600 text-rose-400" 
+                      : "bg-slate-950 border-slate-800 text-slate-500 hover:border-emerald-500 hover:text-emerald-400"
+                  }`}
+                >
+                  {seatId}
+                </div>
+              );
+            })}
+          </div>
         </div>
+
         <div className="flex gap-4 mt-4 text-[10px]">
           <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded bg-slate-950 border border-slate-800 inline-block"></span> Available</div>
           <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded bg-rose-950 border border-rose-600 inline-block"></span> Booked / Locked Row</div>
