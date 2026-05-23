@@ -113,18 +113,16 @@ export default function Home() {
     }
   };
 
-  // Upgraded: Handles dynamic complex cross-cutting race condition profiles
+  // Handles dynamic complex cross-cutting race condition profiles with clean group telemetry
   const handleSimulateConflict = async () => {
     setIsProcessing(true);
     setActionMessage({ text: "Compiling advanced concurrency test pipeline execution blocks...", isError: false });
 
-    // Calculate absolute real-time target metrics
     const totalThreads = batches.reduce((acc, curr) => acc + curr.threadsCount, 0);
     setStats(prev => ({ ...prev, systemLoad: "DYNAMIC STRESS", requestsPerSec: Math.min(totalThreads, 150) }));
 
     const tasks: Promise<{ ok: boolean; text: string; batchLabel: string }>[] = [];
 
-    // Loop through each group profile configured by the user
     batches.forEach((batch) => {
       const targets = batch.seatsInput
         .split(",")
@@ -133,7 +131,6 @@ export default function Home() {
 
       if (targets.length === 0) return;
 
-      // Populate thread executions specifically allocated to this block range
       for (let i = 0; i < batch.threadsCount; i++) {
         tasks.push(
           (async () => {
@@ -161,18 +158,32 @@ export default function Home() {
 
     try {
       const results = await Promise.all(tasks);
-      const networkDrops = results.filter(r => !r.ok && r.text.includes("Network IO")).length;      
-      const lockConflicts = results.filter(r => !r.ok && !r.text.includes("Network IO")).length;
-      const cleanLandings = results.filter(r => r.ok).length;
+      
+      // Calculate concrete metrics based on distinct Group outcomes rather than raw thread clutter
+      const successfulGroups = new Set<string>();
+      const failedGroups = new Set<string>();
+      let realConflictsCaught = 0;
+
+      results.forEach(r => {
+        if (r.ok) {
+          successfulGroups.add(r.batchLabel);
+        } else {
+          failedGroups.add(r.batchLabel);
+          realConflictsCaught++;
+        }
+      });
 
       setStats(prev => ({
         ...prev,
-        conflictsDetected: prev.conflictsDetected + lockConflicts,
+        conflictsDetected: prev.conflictsDetected + realConflictsCaught,
       }));
 
+      const successList = Array.from(successfulGroups).join(", ") || "None";
+      const failureList = Array.from(failedGroups).join(", ") || "None";
+
       setActionMessage({
-        text: `[Pipeline Completed] ${cleanLandings} Transactions landed cleanly. ${lockConflicts} concurrent requests caught & isolated safely by Row Locks (${networkDrops} dropped by network congestion).`,
-        isError: cleanLandings === 0
+        text: `[Pipeline Completed] Landed Cleanly: [${successList}] | Isolated & Blocked by Row Locks: [${failureList}] (${realConflictsCaught} redundant conflicting threads caught cleanly).`,
+        isError: successfulGroups.size === 0
       });
 
     } catch (err) {
@@ -182,7 +193,7 @@ export default function Home() {
       
       setTimeout(() => {
         fetchMetrics();
-      }, 300);
+      }, 400);
 
       setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 3000);
     }
