@@ -62,23 +62,35 @@ public class SeatController {
     }
 
     @PostMapping("/book-bulk")
-    @Transactional // ◄ Forces "All or Nothing". Any exception rolls back the whole batch.
+    @Transactional 
     public ResponseEntity<String> bookSeatsBulk(@RequestBody List<Long> seatIds) {
         List<Seat> requestedSeats = seatRepository.findAllById(seatIds);
 
-        // Validation check 1: Ensure all IDs provided match actual records
-        if (requestedSeats.size() != seatIds.size()) {
-            throw new RuntimeException("Booking failed: One or more requested Seat IDs do not exist.");
-        }
+        List<Long> foundIds = requestedSeats.stream().map(Seat::getId).toList();
+        List<Long> invalidIds = seatIds.stream().filter(id -> !foundIds.contains(id)).toList();
 
-        // Validation check 2: Check if ANY seat in the batch is already booked
+        List<String> takenSeatNumbers = new java.util.ArrayList<>();
         for (Seat seat : requestedSeats) {
-            if (seat.isBooked()) { // Adjust to your entity's boolean check method if different
-                throw new RuntimeException("Transaction aborted: Seat " + seat.getSeatNumber() + " is already taken.");
+            if (seat.isBooked()) {
+                takenSeatNumbers.add(seat.getSeatNumber());
             }
         }
 
-        // Action: If all are clear, book them all safely
+        if (!invalidIds.isEmpty() || !takenSeatNumbers.isEmpty()) {
+            StringBuilder errorMessage = new StringBuilder("Transaction aborted. ");
+            
+            if (!invalidIds.isEmpty()) {
+                errorMessage.append("The following Seat IDs do not exist: ").append(invalidIds).append(". ");
+            }
+            if (!takenSeatNumbers.isEmpty()) {
+                errorMessage.append("The following seats are already reserved: ").append(takenSeatNumbers).append(". ");
+            }
+            
+            errorMessage.append("No changes were saved to the database.");
+            
+            return ResponseEntity.badRequest().body(errorMessage.toString());
+        }
+
         for (Seat seat : requestedSeats) {
             seat.setBooked(true);
         }
