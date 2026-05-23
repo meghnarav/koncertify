@@ -126,3 +126,8 @@ Head to http://localhost:3000 to mess around with the concurrency playground loc
 
 ## Contributing
 Open to collaborators. Especially interested in anyone with experience in distributed systems, payment infrastructure, or fraud detection.
+
+---
+
+## Copyright
+Copyright (c) 2026 Meghna Ravikumar. All rights reserved. No part of this software may be reproduced or distributed without permission.
