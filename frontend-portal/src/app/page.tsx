@@ -275,7 +275,7 @@ export default function Home() {
           <div className="text-lg font-bold text-slate-200 mt-1">{stats.activeBookings}</div>
         </div>
         <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">Available Inventory</div>
+          <div className="text-[10px] text-slate-500 uppercase">Available Seats</div>
           <div className="text-lg font-bold text-slate-200 mt-1">{stats.availableSeats}</div>
         </div>
       </section>
