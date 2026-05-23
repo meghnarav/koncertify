@@ -10,6 +10,12 @@ interface DashboardStats {
   conflictsDetected: number;
 }
 
+interface SimulatorBatch {
+  label: string;
+  seatsInput: string;
+  threadsCount: number;
+}
+
 export default function Home() {
   const [backendStatus, setBackendStatus] = useState<string>("checking...");
   const [loading, setLoading] = useState<boolean>(true);
@@ -25,6 +31,12 @@ export default function Home() {
   const [actionMessage, setActionMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [mockBookedList, setMockBookedList] = useState<number[]>([]);
+
+  // Lab Configuration Profiles State
+  const [batches, setBatches] = useState<SimulatorBatch[]>([
+    { label: "Worker Group Alpha", seatsInput: "5, 6, 7", threadsCount: 25 },
+    { label: "Worker Group Beta", seatsInput: "7, 8, 9", threadsCount: 25 }
+  ]);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
 
@@ -101,53 +113,89 @@ export default function Home() {
     }
   };
 
-  // Simulate 50 Concurrent Users hitting the exact same rows
+  // Upgraded: Handles dynamic complex cross-cutting race condition profiles
   const handleSimulateConflict = async () => {
-    setIsProcessing(true); // Lock the controls immediately to protect state consistency
-    setActionMessage({ text: "Spawning 50 concurrent virtual threads to claim seats 5, 6, 7...", isError: false });
-    setStats(prev => ({ ...prev, systemLoad: "HIGH LOAD (STRESS)", requestsPerSec: 48 }));
+    setIsProcessing(true);
+    setActionMessage({ text: "Compiling advanced concurrency test pipeline execution blocks...", isError: false });
 
-    const targetSeats = [5, 6, 7];
-    
-    // Generate exactly 50 actual parallel HTTP fetch requests down the pipeline
-    const tasks = Array.from({ length: 50 }).map(async () => {
-      try {
-        const res = await fetch(`${baseUrl}/api/seats/book-bulk`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(targetSeats)
-        });
-        
-        const text = await res.text();
-        return { ok: res.ok, text };
-      } catch (err) {
-        return { ok: false, text: "Network IO lock failure." };
+    // Calculate absolute real-time target metrics
+    const totalThreads = batches.reduce((acc, curr) => acc + curr.threadsCount, 0);
+    setStats(prev => ({ ...prev, systemLoad: "DYNAMIC STRESS", requestsPerSec: Math.min(totalThreads, 150) }));
+
+    const tasks: Promise<{ ok: boolean; text: string; batchLabel: string }>[] = [];
+
+    // Loop through each group profile configured by the user
+    batches.forEach((batch) => {
+      const targets = batch.seatsInput
+        .split(",")
+        .map(id => parseInt(id.trim(), 10))
+        .filter(id => !isNaN(id));
+
+      if (targets.length === 0) return;
+
+      // Populate thread executions specifically allocated to this block range
+      for (let i = 0; i < batch.threadsCount; i++) {
+        tasks.push(
+          (async () => {
+            try {
+              const res = await fetch(`${baseUrl}/api/seats/book-bulk`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(targets)
+              });
+              const text = await res.text();
+              return { ok: res.ok, text, batchLabel: batch.label };
+            } catch (err) {
+              return { ok: false, text: "Network IO lock failure.", batchLabel: batch.label };
+            }
+          })()
+        );
       }
     });
+
+    if (tasks.length === 0) {
+      setActionMessage({ text: "Aborted: No processing threads were validly allocated.", isError: true });
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       const results = await Promise.all(tasks);
       const conflictCount = results.filter(r => !r.ok && r.text.includes("CONCURRENCY CONFLICT")).length;
-      const successRoute = results.find(r => r.ok);
+      const totalSuccess = results.filter(r => r.ok).length;
 
-      // Perform a clean, atomic step update on telemetry metrics
       setStats(prev => ({
         ...prev,
         conflictsDetected: prev.conflictsDetected + conflictCount,
       }));
 
-      if (successRoute) {
-        setActionMessage({ text: `[1 Transaction OK] Remaining ${conflictCount} threads blocked safely by pessimistic row locks.`, isError: false });
-      } else {
-        setActionMessage({ text: `All threads rejected. Target rows [5, 6, 7] were already explicitly locked down by database state.`, isError: true });
-      }
+      setActionMessage({
+        text: `[Pipeline Completed] ${totalSuccess} Transactions landed cleanly. ${conflictCount} concurrent requests caught & isolated safely by Row Locks.`,
+        isError: totalSuccess === 0
+      });
+
     } catch (err) {
-      setActionMessage({ text: "Simulation processing pipeline encounter structural collapse.", isError: true });
-    } {
-      setIsProcessing(false); // Clear execution safety locks
+      setActionMessage({ text: "Crash within the execution coordinator stack layer.", isError: true });
+    } finally {
+      setIsProcessing(false);
       fetchMetrics();
       setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 3000);
     }
+  };
+
+  const updateBatchField = (index: number, field: keyof SimulatorBatch, value: any) => {
+    const updated = [...batches];
+    updated[index] = { ...updated[index], [field]: value };
+    setBatches(updated);
+  };
+
+  const addWorkerGroup = () => {
+    if (batches.length >= 4) return; // Prevent DOM bloat layout breaking
+    setBatches([...batches, { label: `Worker Group ${String.fromCharCode(65 + batches.length)}`, seatsInput: "10, 11", threadsCount: 10 }]);
+  };
+
+  const removeWorkerGroup = (index: number) => {
+    setBatches(batches.filter((_, i) => i !== index));
   };
 
   const handleResetSystem = async () => {
@@ -237,8 +285,9 @@ export default function Home() {
       </section>
 
       {/* Action Deck */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Manual Input Core Box */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded lg:col-span-4 h-fit">
           <h3 className="text-sm font-bold text-slate-200 mb-4 uppercase tracking-wider">Execute Transactions</h3>
           <form onSubmit={handleBookingSubmit} className="space-y-4">
             <input
@@ -248,32 +297,94 @@ export default function Home() {
               onChange={(e) => setSeatInput(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 text-xs p-3 text-white focus:outline-none focus:border-emerald-500 font-mono"
             />
-            <button type="submit" disabled={isProcessing} className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs py-3 rounded uppercase tracking-wider">
-              {isProcessing ? "Executing Lock Sequence..." : "Acquire Rows & Book"}
+            <button type="submit" disabled={isProcessing} className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs py-3 rounded uppercase tracking-wider transition-colors">
+              {isProcessing ? "Acquiring Locks..." : "Acquire Rows & Book"}
             </button>
           </form>
 
           {actionMessage && (
-            <div className={`mt-4 p-3 text-xs border rounded ${actionMessage.isError ? "bg-rose-950/40 border-rose-800 text-rose-400" : "bg-emerald-950/40 border-emerald-800 text-emerald-400"}`}>
+            <div className={`mt-4 p-3 text-xs border rounded break-words ${actionMessage.isError ? "bg-rose-950/40 border-rose-800 text-rose-400" : "bg-emerald-950/40 border-emerald-800 text-emerald-400"}`}>
               {actionMessage.text}
             </div>
           )}
         </div>
 
-        {/* Conflict Simulation Control Deck */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded flex flex-col justify-between">
+        {/* Upgraded Multi-Batch Simulation Control Deck */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded lg:col-span-8 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-amber-500 mb-2 uppercase tracking-wider">Race Condition Simulator</h3>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Simulate high concurrent demand by instantly executing multiple overlapping transactions against the exact same memory references. Proves atomicity and row isolation.
-            </p>
-            <button onClick={handleSimulateConflict} disabled={isProcessing} className="bg-amber-950/40 text-amber-400 hover:bg-amber-900/40 border border-amber-800/60 w-full font-bold text-xs py-3 rounded uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed">
-              {isProcessing ? "THREADS ENGAGED..." : "⚡ Trigger 50 Concurrent Bookings"}
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-amber-500 uppercase tracking-wider">Advanced Concurrency Profile Simulator</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Orchestrate overlapping transactional waves targeting clean vs intersecting row intersections.</p>
+              </div>
+              <button 
+                onClick={addWorkerGroup} 
+                disabled={isProcessing || batches.length >= 4} 
+                className="text-[10px] border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-300 px-2.5 py-1 rounded font-bold uppercase transition-colors disabled:opacity-30"
+              >
+                + Add Batch Group
+              </button>
+            </div>
+
+            {/* Configurable Batch Form Matrix Blocks */}
+            <div className="space-y-3 mb-6 max-h-80 overflow-y-auto pr-1">
+              {batches.map((batch, index) => (
+                <div key={index} className="bg-slate-950 border border-slate-850 p-4 rounded grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                  <div className="sm:col-span-3">
+                    <input 
+                      type="text" 
+                      value={batch.label} 
+                      onChange={(e) => updateBatchField(index, "label", e.target.value)}
+                      className="bg-transparent text-xs font-bold text-slate-300 w-full focus:outline-none focus:border-b border-slate-700"
+                    />
+                  </div>
+                  <div className="sm:col-span-5 flex flex-col gap-1">
+                    <label className="text-[9px] text-slate-500 uppercase">Target Row IDs</label>
+                    <input 
+                      type="text" 
+                      value={batch.seatsInput} 
+                      placeholder="5, 6, 7"
+                      onChange={(e) => updateBatchField(index, "seatsInput", e.target.value)}
+                      className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-600"
+                    />
+                  </div>
+                  <div className="sm:col-span-3 flex flex-col gap-1">
+                    <label className="text-[9px] text-slate-500 uppercase">Thread Workers</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="100"
+                      value={batch.threadsCount} 
+                      onChange={(e) => updateBatchField(index, "threadsCount", Math.max(1, parseInt(e.target.value, 10) || 0))}
+                      className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-600"
+                    />
+                  </div>
+                  <div className="sm:col-span-1 text-right mt-3 sm:mt-0">
+                    <button 
+                      onClick={() => removeWorkerGroup(index)}
+                      disabled={batches.length <= 1 || isProcessing}
+                      className="text-slate-600 hover:text-rose-400 text-xs font-bold disabled:opacity-20 transition-colors"
+                      title="Remove worker group"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={handleSimulateConflict} 
+              disabled={isProcessing} 
+              className="bg-amber-950/40 text-amber-400 hover:bg-amber-900/40 border border-amber-800/60 w-full font-bold text-xs py-3 rounded uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {isProcessing ? "DISPATCHING CONCURRENT THREAD BLOCKS..." : "⚡ Execute Programmed Race Conditions"}
             </button>
           </div>
 
-          <div className="border-t border-slate-800 pt-4 mt-6">
-            <button onClick={handleResetSystem} className="text-[10px] text-rose-500 border border-rose-900/50 hover:bg-rose-950/20 px-3 py-1.5 rounded uppercase font-bold">
+          <div className="border-t border-slate-800 pt-4 mt-6 flex justify-between items-center">
+            <span className="text-[10px] text-slate-500">Total Pipeline Virtual Load: <strong className="text-amber-500">{batches.reduce((a, b) => a + b.threadsCount, 0)} requests</strong></span>
+            <button onClick={handleResetSystem} className="text-[10px] text-rose-500 border border-rose-900/50 hover:bg-rose-950/20 px-3 py-1.5 rounded uppercase font-bold transition-colors">
               Emergency Database Reset
             </button>
           </div>
