@@ -104,7 +104,7 @@ npm run dev
 ```
 Head to http://localhost:3000 to mess around with the concurrency playground locally.
 
----
+<!-- ---
 
 ## Roadmap
 - Atomic ticket reservation system
@@ -114,7 +114,7 @@ Head to http://localhost:3000 to mess around with the concurrency playground loc
 - Device fingerprinting
 - Load testing suite — 1000 concurrent users
 - Clean booking UI
-- Admin dashboard for event management
+- Admin dashboard for event management -->
 
 ---
 
