@@ -85,9 +85,7 @@ export default function Home() {
         setSeatInput("");
       } else {
         setActionMessage({ 
-          text: messageText.includes("Transaction aborted") 
-            ? messageText 
-            : "Transaction rolled back. One or more seats were already taken.", 
+          text: messageText || "Transaction rolled back. One or more entries were invalid.", 
           isError: true 
         });
       }
@@ -106,7 +104,6 @@ export default function Home() {
     setActionMessage(null);
 
     try {
-      // Corrected Fetch Call: No payload body, custom header alignment
       const res = await fetch(`${baseUrl}/api/seats/reset-all`, {
         method: "POST",
         headers: {
