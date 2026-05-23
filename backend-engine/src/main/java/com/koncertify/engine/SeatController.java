@@ -64,7 +64,8 @@ public class SeatController {
     @PostMapping("/book-bulk")
     @Transactional 
     public ResponseEntity<String> bookSeatsBulk(@RequestBody List<Long> seatIds) {
-        List<Seat> requestedSeats = seatRepository.findAllById(seatIds);
+        // 1. Acquire explicit row-level locks on all requested seats immediately
+        List<Seat> requestedSeats = seatRepository.findAllByIdWithLock(seatIds);
 
         List<Long> foundIds = requestedSeats.stream().map(Seat::getId).toList();
         List<Long> invalidIds = seatIds.stream().filter(id -> !foundIds.contains(id)).toList();
@@ -77,18 +78,17 @@ public class SeatController {
         }
 
         if (!invalidIds.isEmpty() || !takenSeatNumbers.isEmpty()) {
-            StringBuilder errorMessage = new StringBuilder("Transaction aborted. ");
+            StringBuilder errorReport = new StringBuilder("CONCURRENCY CONFLICT DETECTED: ");
             
             if (!invalidIds.isEmpty()) {
-                errorMessage.append("The following Seat IDs do not exist: ").append(invalidIds).append(". ");
+                errorReport.append("Seat IDs don't exist: ").append(invalidIds).append(". ");
             }
             if (!takenSeatNumbers.isEmpty()) {
-                errorMessage.append("The following seats are already reserved: ").append(takenSeatNumbers).append(". ");
+                errorReport.append("Locked/Booked by another process: ").append(takenSeatNumbers).append(". ");
             }
+            errorReport.append("Atomic rollback executed successfully.");
             
-            errorMessage.append("No changes were saved to the database.");
-            
-            return ResponseEntity.badRequest().body(errorMessage.toString());
+            return ResponseEntity.badRequest().body(errorReport.toString());
         }
 
         for (Seat seat : requestedSeats) {
@@ -96,6 +96,6 @@ public class SeatController {
         }
         
         seatRepository.saveAll(requestedSeats);
-        return ResponseEntity.ok("Successfully reserved all requested seats: " + seatIds);
+        return ResponseEntity.ok("ACQUIRED LOCK - Seats securely reserved: " + seatIds);
     }
 }

@@ -1,11 +1,17 @@
 package com.koncertify.engine;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+import java.util.List;
 
 @Repository
 public interface SeatRepository extends JpaRepository<Seat, Long> {
-    long countByIsBookedFalse();
-    long countByIsBookedTrue();
-    long countByEventIdAndIsBookedFalse(Long eventId);
+    
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Seat s WHERE s.id IN :ids")
+    List<Seat> findAllByIdWithLock(@Param("ids") List<Long> ids);
 }
