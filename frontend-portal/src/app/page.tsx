@@ -101,19 +101,53 @@ export default function Home() {
     }
   };
 
-  // 🔥 KILLER FEATURE: Simulate 50 Concurrent Users hitting the exact same rows
+  // Simulate 50 Concurrent Users hitting the exact same rows
   const handleSimulateConflict = async () => {
+    setIsProcessing(true); // Lock the controls immediately to protect state consistency
     setActionMessage({ text: "Spawning 50 concurrent virtual threads to claim seats 5, 6, 7...", isError: false });
-    
-    // Blast 5 distinct parallel asynchronous requests instantly targeting the same seats
+    setStats(prev => ({ ...prev, systemLoad: "HIGH LOAD (STRESS)", requestsPerSec: 48 }));
+
     const targetSeats = [5, 6, 7];
-    Promise.all([
-      executeReservation(targetSeats, true),
-      executeReservation(targetSeats, true),
-      executeReservation(targetSeats, true),
-      executeReservation(targetSeats, true),
-      executeReservation(targetSeats, true)
-    ]);
+    
+    // Generate exactly 50 actual parallel HTTP fetch requests down the pipeline
+    const tasks = Array.from({ length: 50 }).map(async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/seats/book-bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(targetSeats)
+        });
+        
+        const text = await res.text();
+        return { ok: res.ok, text };
+      } catch (err) {
+        return { ok: false, text: "Network IO lock failure." };
+      }
+    });
+
+    try {
+      const results = await Promise.all(tasks);
+      const conflictCount = results.filter(r => !r.ok && r.text.includes("CONCURRENCY CONFLICT")).length;
+      const successRoute = results.find(r => r.ok);
+
+      // Perform a clean, atomic step update on telemetry metrics
+      setStats(prev => ({
+        ...prev,
+        conflictsDetected: prev.conflictsDetected + conflictCount,
+      }));
+
+      if (successRoute) {
+        setActionMessage({ text: `[1 Transaction OK] Remaining ${conflictCount} threads blocked safely by pessimistic row locks.`, isError: false });
+      } else {
+        setActionMessage({ text: `All threads rejected. Target rows [5, 6, 7] were already explicitly locked down by database state.`, isError: true });
+      }
+    } catch (err) {
+      setActionMessage({ text: "Simulation processing pipeline encounter structural collapse.", isError: true });
+    } {
+      setIsProcessing(false); // Clear execution safety locks
+      fetchMetrics();
+      setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 3000);
+    }
   };
 
   const handleResetSystem = async () => {
@@ -174,7 +208,6 @@ export default function Home() {
           Live Inventory Telemetry Map (1 to {stats.activeBookings + stats.availableSeats} Seats)
         </h3>
         
-        {/* Scrollable responsive box so 1,250 seats look crisp without clogging the viewport */}
         <div className="max-h-64 overflow-y-auto pr-2 custom-scrollbar">
           <div className="grid grid-cols-10 sm:grid-cols-20 md:grid-cols-25 gap-1.5">
             {Array.from({ length: stats.activeBookings + stats.availableSeats }).map((_, index) => {
@@ -234,8 +267,8 @@ export default function Home() {
             <p className="text-xs text-slate-400 leading-relaxed mb-4">
               Simulate high concurrent demand by instantly executing multiple overlapping transactions against the exact same memory references. Proves atomicity and row isolation.
             </p>
-            <button onClick={handleSimulateConflict} disabled={isProcessing} className="bg-amber-950/40 text-amber-400 hover:bg-amber-900/40 border border-amber-800/60 w-full font-bold text-xs py-3 rounded uppercase tracking-widest">
-              ⚡ Trigger 50 Concurrent Bookings
+            <button onClick={handleSimulateConflict} disabled={isProcessing} className="bg-amber-950/40 text-amber-400 hover:bg-amber-900/40 border border-amber-800/60 w-full font-bold text-xs py-3 rounded uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed">
+              {isProcessing ? "THREADS ENGAGED..." : "⚡ Trigger 50 Concurrent Bookings"}
             </button>
           </div>
 
