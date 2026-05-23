@@ -1,10 +1,51 @@
-# Ignore heavy frontend node dependencies
+# ==========================================
+# 1. Environment & Sensitive Credentials (CRITICAL)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.json
+
+# ==========================================
+# 2. Frontend Dependencies & Build Outputs
+# ==========================================
 **/node_modules/
 **/.next/
 **/out/
+.vercel
+.turbo
 
-# Ignore backend build files
+# ==========================================
+# 3. Backend Dependencies & Build Outputs
+# ==========================================
 **/target/
 **/.mvn/
 **/mvnw
 **/mvnw.cmd
+*.jar
+*.war
+
+# ==========================================
+# 4. IDEs, Editors & System Garbage
+# ==========================================
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# System Junk
+.DS_Store
+Thumbs.db
+log/
+*.log
