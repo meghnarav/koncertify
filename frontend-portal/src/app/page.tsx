@@ -179,7 +179,11 @@ export default function Home() {
       setActionMessage({ text: "Crash within the execution coordinator stack layer.", isError: true });
     } finally {
       setIsProcessing(false);
-      fetchMetrics();
+      
+      setTimeout(() => {
+        fetchMetrics();
+      }, 300);
+
       setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 3000);
     }
   };
