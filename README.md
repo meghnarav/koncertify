@@ -1,11 +1,51 @@
 # koncertify
-> Concert ticketing designed to handle high concurrency and resist bot abuse.
+> Concert ticketing designed to handle high concurrency and resist scalper bot abuse.
 
-In 2022, Ticketmaster's system failed millions of Taylor Swift fans. Bots bought entire venue allocations in minutes. Queues crashed. Real fans got nothing.
 
-Koncertify is built around the premise that this is an engineering problem, not an inevitability.
+## Live Deployment:
+
+### Frontend UI: 
+Open [https://koncert-ify.vercel.app/](https://koncert-ify.vercel.app/)
+
+### Spring Boot API Engine: 
+Open [https://koncertify-backend.onrender.com/api/health](https://koncertify-backend.onrender.com/api/health)
 
 ---
+
+## Why this exists
+
+In 2022, Ticketmaster completely failed millions of Taylor Swift fans because their system couldn't handle the dual nightmare of massive traffic spikes and automated scalping bots.
+
+Koncertify is built around the premise that this is an engineering problem, not an inevitability. Working toward a system that handles these problems correctly.
+
+---
+
+## Tech Stack
+- <b>Backend:</b> Java 17 / Spring Boot 3 / Hibernate
+- <b>Database:</b> PostgreSQL (with explicit pessimistic locking)
+- <b>Caching & Queuing:</b> Redis
+- <b>Frontend:</b> Next.js 14 / TypeScript / Tailwind CSS
+- <b>Hosting:</b> Vercel (Frontend) & Render (Backend)
+
+---
+
+## Current Status & Roadmap
+[x] Basic Spring Boot API infrastructure
+
+[x] Atomic multi-row pessimistic validation endpoints
+
+[x] Real-time visual seat matrix telemetry canvas
+
+[x] Multi-group customizable worker simulator
+
+[&nbsp;] Migrate booking ingress into memory-mapped Redis Distributed Locks (Redlock)
+
+[&nbsp;] Stripe Payment Intent integration with webhook atomicity safety nets
+
+[&nbsp;] Bot mitigation layer (Device fingerprinting & Cloudflare Turnstile verification)
+
+---
+<!--
 
 ## The Problem
 High-demand concert ticketing breaks in two specific ways:
@@ -27,20 +67,10 @@ Both are solvable. Most ticketing platforms just haven't prioritised solving the
 
 
 ## Architecture
-`coming soon — architecture diagram`
+`coming soon — architecture diagram` 
 
----
+--- 
 
-## Tech Stack
-- Backend — Java / Spring Boot
-- Queue System — Redis (planned)  
-- Database — PostgreSQL
-- Payments — Stripe (atomic transaction handling)
-- Frontend — React / Next.js
-- Load Testing — Locust or JMeter
-- Containerisation — Docker
-
----
 
 ## Engineering Focus
 
@@ -50,12 +80,29 @@ Both are solvable. Most ticketing platforms just haven't prioritised solving the
 - Failure handling under load
 - Preventing race conditions in seat allocation
 
----
+--- -->
 
 ## Quickstart
-bash <br/>
-`# coming soon`<br/>
-`git clone https://github.com/meghnarav/koncertify `
+### 1. Clone the repo
+```bash
+git clone https://github.com/meghnarav/koncertify.git
+cd koncertify
+```
+
+### 2. Run the Spring Boot Backend
+Configure your database credentials inside `backend/src/main/resources/application.properties`, then run it:
+```bash
+cd backend
+./mvnw spring-boot:run
+```
+
+### 3. Run the Next.js Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Head to http://localhost:3000 to mess around with the concurrency playground locally.
 
 ---
 
@@ -70,20 +117,6 @@ bash <br/>
 - Admin dashboard for event management
 
 ---
-
-## Load Test Results
-> Results will be documented here as development progresses.
-
-Target: System stability under 1000 concurrent users with zero double-sells.
-
----
-
-
-## Why This Exists
-Built out of genuine frustration with how badly existing ticketing infrastructure handles the two problems that matter most — fairness and reliability. Studied the Ticketmaster failures in detail. Working toward a system that handles these problems correctly.
-
----
-
 
 ## Status
 🚧 Active Development — Summer 2026
