@@ -15,7 +15,7 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<DashboardStats>({
     activeBookings: 0,
-    availableSeats: 1248,
+    availableSeats: 1250,
     systemLoad: "Normal",
     requestsPerSec: 0,
     conflictsDetected: 0,
