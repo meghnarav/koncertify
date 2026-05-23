@@ -161,17 +161,18 @@ export default function Home() {
 
     try {
       const results = await Promise.all(tasks);
-      const conflictCount = results.filter(r => !r.ok).length;
-      const totalSuccess = results.filter(r => r.ok).length;
+      const networkDrops = results.filter(r => !r.ok && r.text.includes("Network IO")).length;      
+      const lockConflicts = results.filter(r => !r.ok && !r.text.includes("Network IO")).length;
+      const cleanLandings = results.filter(r => r.ok).length;
 
       setStats(prev => ({
         ...prev,
-        conflictsDetected: prev.conflictsDetected + conflictCount,
+        conflictsDetected: prev.conflictsDetected + lockConflicts,
       }));
 
       setActionMessage({
-        text: `[Pipeline Completed] ${totalSuccess} Transactions landed cleanly. ${conflictCount} concurrent requests caught & isolated safely by Row Locks.`,
-        isError: totalSuccess === 0
+        text: `[Pipeline Completed] ${cleanLandings} Transactions landed cleanly. ${lockConflicts} concurrent requests caught & isolated safely by Row Locks (${networkDrops} dropped by network congestion).`,
+        isError: cleanLandings === 0
       });
 
     } catch (err) {
