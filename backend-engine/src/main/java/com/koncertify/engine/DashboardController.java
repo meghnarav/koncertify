@@ -5,7 +5,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dashboard")
-@CrossOrigin(origins = "https://koncert-ify.vercel.app") // Crucial: Keeps your dashboard endpoints uniform
+@CrossOrigin(origins = "*")
 public class DashboardController {
 
     private final SeatRepository seatRepository;
@@ -19,8 +19,18 @@ public class DashboardController {
     @GetMapping("/stats/{eventId}")
     public Map<String, Long> getStats(@PathVariable Long eventId) {
         return Map.of(
-            "activeBookings", bookingRepository.count(),
-            "availableSeats", seatRepository.countByEventIdAndIsBookedFalse(eventId)
+            "activeBookings", seatRepository.countByEventIdAndIsBookedTrue(eventId),
+            "availableSeats", seatRepository.countByEventIdAndIsBookedFalse(eventId),
+            "totalOrders", bookingRepository.count()
+        );
+    }
+
+    @GetMapping("/summary")
+    public Map<String, Long> getSummary() {
+        return Map.of(
+            "activeBookings", seatRepository.countByIsBookedTrue(),
+            "availableSeats", seatRepository.countByIsBookedFalse(),
+            "totalOrders", bookingRepository.count()
         );
     }
 }

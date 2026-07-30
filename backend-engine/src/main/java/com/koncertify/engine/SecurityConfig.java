@@ -21,8 +21,8 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/api/seats/**", "/api/events/**", "/api/bookings/**", "/actuator/health").permitAll()
-                .anyRequest().authenticated()
+                .requestMatchers("/api/**", "/actuator/**", "/tickets/**").permitAll()
+                .anyRequest().permitAll()
             );
 
         return http.build();
@@ -32,16 +32,10 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Match the origin your frontend is running on
-        configuration.setAllowedOrigins(List.of("https://koncert-ify.vercel.app"));
-        
-        // Explicitly allow all HTTP standard methods
+        // Allow local dev origins and deployed domains dynamically
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
-        
-        // Allow all headers to prevent authentication token blocks
         configuration.setAllowedHeaders(List.of("*"));
-        
-        // Allow cookies/auth headers if needed
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

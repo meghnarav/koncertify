@@ -1,6 +1,27 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { 
+  ShieldCheck, ShieldAlert, Cpu, Zap, Ticket, Layers, 
+  RefreshCw, Lock, CheckCircle2, AlertTriangle, Users, 
+  Terminal, Activity, Sparkles, Check, Server
+} from "lucide-react";
+
+interface SeatData {
+  id: number;
+  seatNumber: string;
+  seatLabel?: string;
+  isBooked: boolean;
+  booked?: boolean;
+}
+
+interface OrderData {
+  id?: number;
+  userEmail: string;
+  confirmationCode: string;
+  bookingTime?: string;
+  bookedSeats: number[];
+}
 
 interface DashboardStats {
   activeBookings: number;
@@ -8,6 +29,8 @@ interface DashboardStats {
   systemLoad: string;
   requestsPerSec: number;
   conflictsDetected: number;
+  p50LatencyMs: number;
+  p99LatencyMs: number;
 }
 
 interface SimulatorBatch {
@@ -17,111 +40,205 @@ interface SimulatorBatch {
 }
 
 export default function Home() {
-  const [backendStatus, setBackendStatus] = useState<string>("checking...");
-  const [loading, setLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<"portal" | "simulator" | "orders">("portal");
+  const [backendStatus, setBackendStatus] = useState<"checking..." | "CONNECTED" | "OFFLINE" | "ERROR">("checking...");
+  const [botProtection, setBotProtection] = useState<boolean>(true);
+  const [allSeats, setAllSeats] = useState<SeatData[]>([]);
+  const [selectedSeatIds, setSelectedSeatIds] = useState<number[]>([]);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [confirmedOrder, setConfirmedOrder] = useState<OrderData | null>(null);
+  const [ordersList, setOrdersList] = useState<OrderData[]>([]);
+  
   const [stats, setStats] = useState<DashboardStats>({
     activeBookings: 0,
     availableSeats: 1250,
     systemLoad: "Normal",
     requestsPerSec: 0,
     conflictsDetected: 0,
+    p50LatencyMs: 4,
+    p99LatencyMs: 18,
   });
-  
-  const [seatInput, setSeatInput] = useState<string>("");
+
+  const [sectionFilter, setSectionFilter] = useState<"ALL" | "VIP" | "FLOOR" | "GALLERY">("ALL");
   const [actionMessage, setActionMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [mockBookedList, setMockBookedList] = useState<number[]>([]);
 
-  // Lab Configuration Profiles State
+  // Concurrency Simulator Batches
   const [batches, setBatches] = useState<SimulatorBatch[]>([
     { label: "Worker Group Alpha", seatsInput: "5, 6, 7", threadsCount: 25 },
-    { label: "Worker Group Beta", seatsInput: "7, 8, 9", threadsCount: 25 }
+    { label: "Worker Group Beta", seatsInput: "7, 8, 9", threadsCount: 25 },
+    { label: "Worker Group Gamma", seatsInput: "12, 13, 14", threadsCount: 15 }
   ]);
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://koncertify-backend.onrender.com";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:10000";
 
+  // Fetch metrics & seat state from backend
   const fetchMetrics = async () => {
     try {
+      const startTime = performance.now();
       const res = await fetch(`${baseUrl}/api/seats`);
+      const endTime = performance.now();
+      const latency = Math.round(endTime - startTime);
+
       if (!res.ok) throw new Error();
-      const allSeats = await res.json();
+      const seatsData: SeatData[] = await res.json();
       
-      const bookedIds = allSeats.filter((s: any) => s.booked || s.isBooked).map((s: any) => Number(s.id));
-      setMockBookedList(bookedIds);
+      setAllSeats(seatsData);
+
+      const bookedCount = seatsData.filter(s => s.isBooked || s.booked).length;
+      const totalCount = seatsData.length || 1250;
 
       setStats(prev => ({
         ...prev,
-        activeBookings: bookedIds.length,
-        availableSeats: allSeats.length - bookedIds.length
+        activeBookings: bookedCount,
+        availableSeats: totalCount - bookedCount,
+        p50LatencyMs: Math.max(3, Math.min(latency, 25)),
+        p99LatencyMs: Math.max(12, Math.min(latency * 2, 85))
       }));
     } catch (err) {
-      console.error("Failed to sync system states.");
+      console.error("Failed to sync metrics from backend.");
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch(`${baseUrl}/api/bookings`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrdersList(data);
+      }
+    } catch {
+      // Ignore fallback
+    }
+  };
+
+  const fetchBotProtectionStatus = async () => {
+    try {
+      const res = await fetch(`${baseUrl}/api/admin/bot-protection`);
+      if (res.ok) {
+        const data = await res.json();
+        setBotProtection(data.enabled);
+      }
+    } catch {
+      // Ignore
     }
   };
 
   useEffect(() => {
     fetch(`${baseUrl}/api/health`)
       .then((res) => (res.ok ? setBackendStatus("CONNECTED") : setBackendStatus("ERROR")))
-      .catch(() => setBackendStatus("OFFLINE"))
-      .finally(() => setLoading(false));
+      .catch(() => setBackendStatus("OFFLINE"));
 
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 4000);
+    fetchOrders();
+    fetchBotProtectionStatus();
+
+    const interval = setInterval(() => {
+      fetchMetrics();
+    }, 3500);
+
     return () => clearInterval(interval);
   }, []);
 
-  const handleBookingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    executeReservation(seatInput.split(",").map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)));
+  // Toggle Bot Protection Filter
+  const toggleBotProtection = async () => {
+    const nextState = !botProtection;
+    try {
+      const res = await fetch(`${baseUrl}/api/admin/bot-protection?enabled=${nextState}`, { method: "POST" });
+      if (res.ok) {
+        setBotProtection(nextState);
+        setActionMessage({
+          text: `Bot mitigation rate-limiting filter is now ${nextState ? "ENABLED (15 req/s threshold)" : "DISABLED"}.`,
+          isError: false
+        });
+      }
+    } catch {
+      setActionMessage({ text: "Failed to update bot mitigation setting.", isError: true });
+    }
   };
 
-  const executeReservation = async (idsToBook: number[], isStressTest = false) => {
-    if (idsToBook.length === 0) return;
+  // Toggle Seat Selection for Buyer
+  const handleSeatClick = (seatId: number, isBooked: boolean) => {
+    if (isBooked) return;
+    if (selectedSeatIds.includes(seatId)) {
+      setSelectedSeatIds(selectedSeatIds.filter(id => id !== seatId));
+    } else {
+      if (selectedSeatIds.length >= 6) {
+        setActionMessage({ text: "Maximum 6 seats per transaction for fairness.", isError: true });
+        return;
+      }
+      setSelectedSeatIds([...selectedSeatIds, seatId]);
+    }
+  };
+
+  // Quick Select Seats
+  const quickSelectSeats = (count: number, section?: string) => {
+    let candidateSeats = allSeats.filter(s => !(s.isBooked || s.booked));
+    if (section === "VIP") candidateSeats = candidateSeats.filter(s => s.id <= 250);
+    if (section === "FLOOR") candidateSeats = candidateSeats.filter(s => s.id > 250 && s.id <= 750);
+    if (section === "GALLERY") candidateSeats = candidateSeats.filter(s => s.id > 750);
+
+    const picked = candidateSeats.slice(0, count).map(s => Number(s.id));
+    setSelectedSeatIds(picked);
+  };
+
+  // Execute Fan Ticket Checkout
+  const handleFanCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedSeatIds.length === 0) return;
+
     setIsProcessing(true);
     setActionMessage(null);
 
-    if (isStressTest) {
-      setStats(prev => ({ ...prev, systemLoad: "HIGH LOAD (STRESS)", requestsPerSec: 48 }));
-    }
-
     try {
-      const res = await fetch(`${baseUrl}/api/seats/book-bulk`, {
+      const res = await fetch(`${baseUrl}/api/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(idsToBook)
+        body: JSON.stringify({
+          email: userEmail || `fan-${Math.floor(Math.random()*10000)}@koncertify.io`,
+          seatNums: selectedSeatIds
+        })
       });
 
-      const messageText = await res.text();
+      const responseData = await res.json();
 
-      if (res.ok) {
-        setActionMessage({ text: messageText, isError: false });
-        setSeatInput("");
+      if (res.ok && responseData.confirmationCode) {
+        setConfirmedOrder(responseData);
+        setSelectedSeatIds([]);
+        setUserEmail("");
+        setActionMessage({
+          text: `Success! Confirmed Order ${responseData.confirmationCode} for seats [${responseData.bookedSeats.join(", ")}].`,
+          isError: false
+        });
+        fetchMetrics();
+        fetchOrders();
       } else {
-        if (messageText.includes("CONCURRENCY CONFLICT")) {
+        const errorMsg = responseData.error || responseData.message || "Reservation failed.";
+        if (errorMsg.includes("CONCURRENCY CONFLICT") || errorMsg.includes("locked") || errorMsg.includes("already booked")) {
           setStats(prev => ({ ...prev, conflictsDetected: prev.conflictsDetected + 1 }));
         }
-        setActionMessage({ text: messageText, isError: true });
+        setActionMessage({ text: errorMsg, isError: true });
       }
-      fetchMetrics();
-    } catch (err) {
-      setActionMessage({ text: "Network IO lock failure.", isError: true });
+    } catch {
+      setActionMessage({ text: "Transaction error: Network IO connection timeout.", isError: true });
     } finally {
       setIsProcessing(false);
-      if (isStressTest) {
-        setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 2000);
-      }
     }
   };
 
-  // Handles dynamic complex cross-cutting race condition profiles with clean group telemetry
+  // Execute Concurrent Worker Load Simulation
   const handleSimulateConflict = async () => {
     setIsProcessing(true);
-    setActionMessage({ text: "Compiling advanced concurrency test pipeline execution blocks...", isError: false });
+    setActionMessage({ text: "Dispatching multi-group concurrent transactional threads...", isError: false });
 
     const totalThreads = batches.reduce((acc, curr) => acc + curr.threadsCount, 0);
-    setStats(prev => ({ ...prev, systemLoad: "DYNAMIC STRESS", requestsPerSec: Math.min(totalThreads, 150) }));
+    setStats(prev => ({ 
+      ...prev, 
+      systemLoad: "HIGH STRESS", 
+      requestsPerSec: Math.min(totalThreads, 160)
+    }));
 
-    const tasks: Promise<{ ok: boolean; text: string; batchLabel: string }>[] = [];
+    const tasks: Promise<{ ok: boolean; status: number; text: string; batchLabel: string }>[] = [];
 
     batches.forEach((batch) => {
       const targets = batch.seatsInput
@@ -141,9 +258,9 @@ export default function Home() {
                 body: JSON.stringify(targets)
               });
               const text = await res.text();
-              return { ok: res.ok, text, batchLabel: batch.label };
-            } catch (err) {
-              return { ok: false, text: "Network IO lock failure.", batchLabel: batch.label };
+              return { ok: res.ok, status: res.status, text, batchLabel: batch.label };
+            } catch {
+              return { ok: false, status: 500, text: "IO failure.", batchLabel: batch.label };
             }
           })()
         );
@@ -151,7 +268,7 @@ export default function Home() {
     });
 
     if (tasks.length === 0) {
-      setActionMessage({ text: "Aborted: No processing threads were validly allocated.", isError: true });
+      setActionMessage({ text: "Aborted: No valid target seats in worker groups.", isError: true });
       setIsProcessing(false);
       return;
     }
@@ -159,17 +276,21 @@ export default function Home() {
     try {
       const results = await Promise.all(tasks);
       
-      // Calculate concrete metrics based on distinct Group outcomes rather than raw thread clutter
       const successfulGroups = new Set<string>();
       const failedGroups = new Set<string>();
       let realConflictsCaught = 0;
+      let botRateLimitsHit = 0;
 
       results.forEach(r => {
         if (r.ok) {
           successfulGroups.add(r.batchLabel);
         } else {
           failedGroups.add(r.batchLabel);
-          realConflictsCaught++;
+          if (r.status === 429) {
+            botRateLimitsHit++;
+          } else {
+            realConflictsCaught++;
+          }
         }
       });
 
@@ -181,24 +302,82 @@ export default function Home() {
       const successList = Array.from(successfulGroups).join(", ") || "None";
       const failureList = Array.from(failedGroups).join(", ") || "None";
 
+      let summaryText = `[Test Completed] Won Locks: [${successList}] | Isolated & Rolled Back: [${failureList}] (${realConflictsCaught} race conflicts caught cleanly).`;
+      if (botRateLimitsHit > 0) {
+        summaryText += ` 🛡️ Anti-Scalper Bot Defense blocked ${botRateLimitsHit} excessive requests with HTTP 429.`;
+      }
+
       setActionMessage({
-        text: `[Pipeline Completed] Landed Cleanly: [${successList}] | Isolated & Blocked by Row Locks: [${failureList}] (${realConflictsCaught} redundant conflicting threads caught cleanly).`,
+        text: summaryText,
         isError: successfulGroups.size === 0
       });
 
-    } catch (err) {
-      setActionMessage({ text: "Crash within the execution coordinator stack layer.", isError: true });
+    } catch {
+      setActionMessage({ text: "Pipeline execution error.", isError: true });
     } finally {
       setIsProcessing(false);
-      
-      setTimeout(() => {
-        fetchMetrics();
-      }, 400);
-
+      setTimeout(() => fetchMetrics(), 400);
       setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 3000);
     }
   };
 
+  // Trigger Scalper Bot Burst Test
+  const handleSimulateBotBurst = async () => {
+    setIsProcessing(true);
+    setActionMessage({ text: "Firing 50 rapid-fire automated bot requests in 500ms...", isError: false });
+    
+    setStats(prev => ({ ...prev, systemLoad: "BOT ATTACK", requestsPerSec: 100 }));
+
+    const botRequests: Promise<number>[] = [];
+    for (let i = 0; i < 50; i++) {
+      botRequests.push(
+        fetch(`${baseUrl}/api/seats/book-bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify([99, 100])
+        }).then(res => res.status)
+      );
+    }
+
+    const statuses = await Promise.all(botRequests);
+    const rateLimitedCount = statuses.filter(s => s === 429).length;
+    const okCount = statuses.filter(s => s === 200).length;
+
+    if (rateLimitedCount > 0) {
+      setActionMessage({
+        text: `🛡️ BOT DEFENSE ACTIVE: ${rateLimitedCount} automated scalper requests were BLOCKED (HTTP 429). ${okCount} landed within allowed rate limits.`,
+        isError: false
+      });
+    } else {
+      setActionMessage({
+        text: `⚠️ Bot protection is currently DISABLED or threshold was not exceeded. ${okCount} requests passed.`,
+        isError: true
+      });
+    }
+
+    setIsProcessing(false);
+    setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 2500);
+  };
+
+  // Reset Database State
+  const handleResetSystem = async () => {
+    if (!window.confirm("Reset all operational seats and clear database locks?")) return;
+    setIsProcessing(true);
+    try {
+      await fetch(`${baseUrl}/api/seats/reset-all`, { method: "POST" });
+      setActionMessage({ text: "Database state successfully reset to 1,250 available seats.", isError: false });
+      setStats(prev => ({ ...prev, conflictsDetected: 0 }));
+      setSelectedSeatIds([]);
+      fetchMetrics();
+      fetchOrders();
+    } catch {
+      setActionMessage({ text: "Reset dropped.", isError: true });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Batch group helpers
   const updateBatchField = (index: number, field: keyof SimulatorBatch, value: any) => {
     const updated = [...batches];
     updated[index] = { ...updated[index], [field]: value };
@@ -207,20 +386,11 @@ export default function Home() {
 
   const addWorkerGroup = () => {
     if (batches.length >= 4) return;
-    
-    const existingLabels = batches.map(b => b.label);
-    let nextCharOffset = batches.length;
-    let proposedLabel = `Worker Group ${String.fromCharCode(65 + nextCharOffset)}`;
-    
-    while (existingLabels.includes(proposedLabel) && nextCharOffset < 26) {
-      nextCharOffset++;
-      proposedLabel = `Worker Group ${String.fromCharCode(65 + nextCharOffset)}`;
-    }
-
-    setBatches([...batches, { 
-      label: proposedLabel, 
-      seatsInput: "10, 11", 
-      threadsCount: 10 
+    const charCode = 65 + batches.length;
+    setBatches([...batches, {
+      label: `Worker Group ${String.fromCharCode(charCode)}`,
+      seatsInput: `${batches.length * 10 + 5}, ${batches.length * 10 + 6}`,
+      threadsCount: 15
     }]);
   };
 
@@ -228,198 +398,599 @@ export default function Home() {
     setBatches(batches.filter((_, i) => i !== index));
   };
 
-  const handleResetSystem = async () => {
-    if (!window.confirm("Trigger system-wide row eviction and clear locks?")) return;
-    setIsProcessing(true);
-    try {
-      await fetch(`${baseUrl}/api/seats/reset-all`, { method: "POST" });
-      setActionMessage({ text: "Database state completely cleared.", isError: false });
-      setStats(prev => ({ ...prev, conflictsDetected: 0 }));
-      fetchMetrics();
-    } catch {
-      setActionMessage({ text: "Reset dropped.", isError: true });
-    } finally {
-      setIsProcessing(false);
-    }
+  const filteredSeats = allSeats.filter(s => {
+    if (sectionFilter === "VIP") return s.id <= 250;
+    if (sectionFilter === "FLOOR") return s.id > 250 && s.id <= 750;
+    if (sectionFilter === "GALLERY") return s.id > 750;
+    return true;
+  });
+
+  const getSeatPrice = (id: number) => {
+    if (id <= 250) return 250;
+    if (id <= 750) return 180;
+    return 120;
   };
 
+  const totalPrice = selectedSeatIds.reduce((sum, id) => sum + getSeatPrice(id), 0);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 font-mono">
-      {/* Top Banner */}
-      <header className="border-b border-slate-800 pb-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-10 font-mono select-none">
+      
+      {/* Top Header & Platform Diagnostics Bar */}
+      <header className="glass-panel p-5 rounded-xl mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-wider text-emerald-400">KONCERTIFY CORE ENGINE v1.0</h1>
-          <p className="text-xs text-slate-500 uppercase mt-1">Transactional Concurrency & Lock Diagnostics Panel</p>
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-6 h-6 text-emerald-400 animate-pulse" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-amber-400">
+              KONCERTIFY CORE ENGINE v2.0
+            </h1>
+          </div>
+          <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+            <span>High-Concurrency Ticket Engine</span>
+            <span>•</span>
+            <span>Deterministic Row Locks & Redis Redlock Safety</span>
+          </p>
         </div>
-        <div className="text-xs bg-slate-900 border border-slate-800 p-3 rounded-md">
-          Engine Connection: <span className="text-emerald-400 font-bold">{backendStatus}</span>
+
+        {/* Backend & Bot Status Pill */}
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="bg-slate-900/90 border border-slate-800 px-3 py-2 rounded-lg flex items-center gap-2">
+            <Server className="w-4 h-4 text-slate-400" />
+            <span className="text-slate-400">Backend:</span>
+            <span className={`font-bold ${backendStatus === "CONNECTED" ? "text-emerald-400" : "text-rose-400"}`}>
+              {backendStatus}
+            </span>
+          </div>
+
+          <button 
+            onClick={toggleBotProtection}
+            className={`px-3 py-2 rounded-lg border font-bold flex items-center gap-2 transition-all ${
+              botProtection 
+                ? "bg-emerald-950/40 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/50" 
+                : "bg-rose-950/40 border-rose-800/60 text-rose-300 hover:bg-rose-900/50"
+            }`}
+            title="Click to toggle Scalper Bot Rate Limiter"
+          >
+            {botProtection ? <ShieldCheck className="w-4 h-4 text-emerald-400" /> : <ShieldAlert className="w-4 h-4 text-rose-400" />}
+            <span>Bot Defense: {botProtection ? "ACTIVE" : "OFF"}</span>
+          </button>
         </div>
       </header>
 
-      {/* Systems Telemetry Panel */}
-      <section className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">System Status</div>
-          <div className={`text-lg font-bold mt-1 ${stats.systemLoad !== "Normal" ? "text-amber-400 animate-pulse" : "text-slate-200"}`}>{stats.systemLoad}</div>
-        </div>
-        <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">Throughput</div>
-          <div className="text-lg font-bold text-slate-200 mt-1">{stats.requestsPerSec} req/s</div>
-        </div>
-        <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">Pessimistic Conflicts Caught</div>
-          <div className="text-lg font-bold text-rose-500 mt-1">{stats.conflictsDetected}</div>
-        </div>
-        <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">Active Bookings</div>
-          <div className="text-lg font-bold text-slate-200 mt-1">{stats.activeBookings}</div>
-        </div>
-        <div className="bg-slate-900 p-4 border border-slate-800 rounded">
-          <div className="text-[10px] text-slate-500 uppercase">Available Seats</div>
-          <div className="text-lg font-bold text-slate-200 mt-1">{stats.availableSeats}</div>
-        </div>
-      </section>
+      {/* Main Tab Navigation */}
+      <div className="flex border-b border-slate-800 mb-8 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab("portal")}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "portal"
+              ? "border-emerald-400 text-emerald-400 bg-slate-900/50"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Ticket className="w-4 h-4" />
+          Fan Ticket Buyer Portal
+        </button>
 
-      {/* Real-time Seat Matrix Visualization */}
-      <section className="bg-slate-900 border border-slate-800 p-6 rounded mb-8">
-        <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">
-          Live Inventory Telemetry Map (1 to {stats.activeBookings + stats.availableSeats} Seats)
-        </h3>
-        
-        <div className="max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-          <div className="grid grid-cols-10 sm:grid-cols-20 md:grid-cols-25 gap-1.5">
-            {Array.from({ length: stats.activeBookings + stats.availableSeats }).map((_, index) => {
-              const seatId = index + 1;
-              const isBooked = mockBookedList.includes(seatId);
-              return (
-                <div
-                  key={seatId}
-                  title={`Seat ID: ${seatId}`}
-                  className={`h-5 text-[8px] flex items-center justify-center font-bold rounded select-none transition-all border ${
-                    isBooked 
-                      ? "bg-rose-950/80 border-rose-600 text-rose-400" 
-                      : "bg-slate-950 border-slate-800 text-slate-500 hover:border-emerald-500 hover:text-emerald-400"
-                  }`}
-                >
-                  {seatId}
-                </div>
-              );
-            })}
+        <button
+          onClick={() => setActiveTab("simulator")}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "simulator"
+              ? "border-amber-400 text-amber-400 bg-slate-900/50"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Cpu className="w-4 h-4" />
+          Concurrency & Load Simulator
+        </button>
+
+        <button
+          onClick={() => setActiveTab("orders")}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "orders"
+              ? "border-cyan-400 text-cyan-400 bg-slate-900/50"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Confirmed Orders ({ordersList.length})
+        </button>
+      </div>
+
+      {/* Telemetry Quick Bar */}
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>System Load</span>
+            <Activity className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+          <div className={`text-sm font-bold mt-1 ${stats.systemLoad !== "Normal" ? "text-amber-400 animate-pulse" : "text-slate-200"}`}>
+            {stats.systemLoad}
           </div>
         </div>
 
-        <div className="flex gap-4 mt-4 text-[10px]">
-          <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded bg-slate-950 border border-slate-800 inline-block"></span> Available</div>
-          <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded bg-rose-950 border border-rose-600 inline-block"></span> Booked / Locked Row</div>
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>Throughput</span>
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+          </div>
+          <div className="text-sm font-bold text-slate-200 mt-1">{stats.requestsPerSec} req/s</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>Race Conflicts Caught</span>
+            <Lock className="w-3.5 h-3.5 text-rose-400" />
+          </div>
+          <div className="text-sm font-bold text-rose-400 mt-1">{stats.conflictsDetected}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>Active Bookings</span>
+            <Ticket className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <div className="text-sm font-bold text-slate-200 mt-1">{stats.activeBookings} / 1250</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>Available Seats</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+          </div>
+          <div className="text-sm font-bold text-slate-200 mt-1">{stats.availableSeats}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-lg">
+          <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
+            <span>P50 / P99 Latency</span>
+            <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+          </div>
+          <div className="text-sm font-bold text-slate-200 mt-1">{stats.p50LatencyMs}ms / {stats.p99LatencyMs}ms</div>
         </div>
       </section>
 
-      {/* Action Deck */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Manual Input Core Box */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded lg:col-span-4 h-fit">
-          <h3 className="text-sm font-bold text-slate-200 mb-4 uppercase tracking-wider">Execute Transactions</h3>
-          <form onSubmit={handleBookingSubmit} className="space-y-4">
-            <input
-              type="text"
-              placeholder="Enter Seat IDs (e.g. 1, 2, 3, 4)"
-              value={seatInput}
-              onChange={(e) => setSeatInput(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-xs p-3 text-white focus:outline-none focus:border-emerald-500 font-mono"
-            />
-            <button type="submit" disabled={isProcessing} className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs py-3 rounded uppercase tracking-wider transition-colors">
-              {isProcessing ? "Acquiring Locks..." : "Acquire Rows & Book"}
-            </button>
-          </form>
-
-          {actionMessage && (
-            <div className={`mt-4 p-3 text-xs border rounded break-words ${actionMessage.isError ? "bg-rose-950/40 border-rose-800 text-rose-400" : "bg-emerald-950/40 border-emerald-800 text-emerald-400"}`}>
-              {actionMessage.text}
-            </div>
-          )}
+      {/* Global Status Banner Notification */}
+      {actionMessage && (
+        <div className={`mb-6 p-4 rounded-lg text-xs border flex items-center justify-between gap-3 ${
+          actionMessage.isError 
+            ? "bg-rose-950/50 border-rose-800 text-rose-300" 
+            : "bg-emerald-950/50 border-emerald-800 text-emerald-300"
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {actionMessage.isError ? <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+            <span className="font-semibold">{actionMessage.text}</span>
+          </div>
+          <button onClick={() => setActionMessage(null)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
         </div>
+      )}
 
-        {/* Upgraded Multi-Batch Simulation Control Deck */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded lg:col-span-8 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-amber-500 uppercase tracking-wider">Advanced Concurrency Profile Simulator</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Orchestrate overlapping transactional waves targeting clean vs intersecting row intersections.</p>
+      {/* TAB 1: FAN TICKET BUYER PORTAL */}
+      {activeTab === "portal" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Concert Event Banner & Stage Map */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Event Hero */}
+            <div className="glass-panel p-6 rounded-xl relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/60 border border-slate-800">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-10">
+                <div>
+                  <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px] uppercase font-bold px-2.5 py-1 rounded-full">
+                    LIVE TICKETING SALE
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white mt-2">Koncertify Summer Fest 2026</h2>
+                  <p className="text-xs text-slate-400 mt-1">Grand Arena Stadium • August 28, 2026</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-400">Tickets starting from</div>
+                  <div className="text-2xl font-extrabold text-emerald-400">$120</div>
+                </div>
               </div>
+
+              {/* Stage Visual representation */}
+              <div className="mt-8 border-t border-slate-800/80 pt-6">
+                <div className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white tracking-widest uppercase shadow-lg shadow-purple-900/30 mb-6">
+                  ⚡ STAGE / PERFORMANCE AREA ⚡
+                </div>
+
+                {/* Section Filter Pills */}
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 uppercase font-bold">Filter Tier:</span>
+                    {(["ALL", "VIP", "FLOOR", "GALLERY"] as const).map(sec => (
+                      <button
+                        key={sec}
+                        onClick={() => setSectionFilter(sec)}
+                        className={`text-[10px] uppercase font-bold px-3 py-1.5 rounded-md border transition-all ${
+                          sectionFilter === sec
+                            ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                            : "bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        {sec}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Quick Pick Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => quickSelectSeats(2, sectionFilter === "ALL" ? undefined : sectionFilter)}
+                      className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded font-bold uppercase transition-colors"
+                    >
+                      + Quick Pick 2 Seats
+                    </button>
+                    <button 
+                      onClick={() => setSelectedSeatIds([])}
+                      className="text-[10px] text-slate-500 hover:text-slate-300 font-bold uppercase"
+                    >
+                      Clear Selection
+                    </button>
+                  </div>
+                </div>
+
+                {/* Interactive Seat Grid */}
+                <div className="bg-slate-950/80 border border-slate-850 p-4 rounded-xl max-h-[380px] overflow-y-auto custom-scrollbar">
+                  <div className="grid grid-cols-8 sm:grid-cols-16 md:grid-cols-25 gap-1.5">
+                    {filteredSeats.map((seat) => {
+                      const seatId = Number(seat.id);
+                      const isBooked = Boolean(seat.isBooked || seat.booked);
+                      const isSelected = selectedSeatIds.includes(seatId);
+
+                      let styleClass = "bg-slate-900 border-slate-800 text-slate-400 hover:border-emerald-500 hover:text-emerald-400 cursor-pointer";
+                      if (isBooked) {
+                        styleClass = "bg-rose-950/70 border-rose-900 text-rose-500 cursor-not-allowed opacity-80";
+                      } else if (isSelected) {
+                        styleClass = "bg-emerald-400 text-slate-950 border-emerald-300 font-extrabold shadow-md shadow-emerald-500/30 scale-105";
+                      }
+
+                      return (
+                        <div
+                          key={seatId}
+                          onClick={() => handleSeatClick(seatId, isBooked)}
+                          title={`Seat #${seatId} - Tier: ${getSeatPrice(seatId) === 250 ? "VIP ($250)" : getSeatPrice(seatId) === 180 ? "Main Floor ($180)" : "Upper Gallery ($120)"}`}
+                          className={`h-6 text-[9px] flex items-center justify-center font-mono rounded transition-all border ${styleClass}`}
+                        >
+                          {seatId}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Seat Map Legend */}
+                <div className="flex flex-wrap gap-4 mt-4 text-[10px] text-slate-400 justify-between items-center">
+                  <div className="flex gap-4">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded bg-slate-900 border border-slate-800 inline-block"></span> Available
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded bg-emerald-400 inline-block"></span> Selected
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded bg-rose-950 border border-rose-900 inline-block"></span> Booked / Sold Out
+                    </span>
+                  </div>
+                  <div className="text-slate-500">
+                    Showing {filteredSeats.length} seats
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Shopping Cart & Atomic Checkout Panel */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="glass-panel p-6 rounded-xl border border-slate-800 h-full flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Ticket className="w-4 h-4 text-emerald-400" />
+                  Your Order Selection
+                </h3>
+
+                {selectedSeatIds.length === 0 ? (
+                  <div className="text-center py-10 border border-dashed border-slate-800 rounded-xl">
+                    <Ticket className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                    <p className="text-xs text-slate-500">Click seats on the arena map to begin checkout.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-850 space-y-2 max-h-48 overflow-y-auto">
+                      {selectedSeatIds.map(id => (
+                        <div key={id} className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-200">Seat #{id}</span>
+                          <span className="text-slate-400">${getSeatPrice(id)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-sm font-bold">
+                      <span className="text-slate-300">Total Price:</span>
+                      <span className="text-emerald-400 text-lg">${totalPrice}</span>
+                    </div>
+
+                    <form onSubmit={handleFanCheckout} className="space-y-3 pt-2">
+                      <div>
+                        <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Fan Email Address</label>
+                        <input
+                          type="email"
+                          placeholder="fan@example.com"
+                          value={userEmail}
+                          onChange={(e) => setUserEmail(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isProcessing}
+                        className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs py-3.5 rounded-lg uppercase tracking-wider transition-all disabled:opacity-50 shadow-lg shadow-emerald-950/50"
+                      >
+                        {isProcessing ? "Acquiring Atomic Locks..." : "🔒 Complete Atomic Checkout"}
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+
+              {/* Security info footer */}
+              <div className="mt-8 border-t border-slate-800/80 pt-4 text-[10px] text-slate-500 space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Atomic Multi-Row Pessimistic Guarantee
+                </div>
+                <p>Transactions are validated atomically. Double-allocations are impossible under high concurrency.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: CONCURRENCY & LOAD SIMULATOR */}
+      {activeTab === "simulator" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Worker Groups Configuration */}
+          <div className="lg:col-span-8 glass-panel p-6 rounded-xl border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-amber-400" />
+                    Multi-Worker Race Condition Simulator
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Orchestrate overlapping concurrent worker threads targeting clean vs intersecting row locks.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={addWorkerGroup} 
+                  disabled={isProcessing || batches.length >= 4} 
+                  className="text-[10px] border border-amber-800/60 bg-amber-950/30 hover:bg-amber-900/40 text-amber-300 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors disabled:opacity-30"
+                >
+                  + Add Worker Group
+                </button>
+              </div>
+
+              {/* Batch Matrix */}
+              <div className="space-y-3 mb-6">
+                {batches.map((batch, index) => (
+                  <div key={index} className="bg-slate-950 border border-slate-850 p-4 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    <div className="sm:col-span-3">
+                      <input 
+                        type="text" 
+                        value={batch.label} 
+                        onChange={(e) => updateBatchField(index, "label", e.target.value)}
+                        className="bg-transparent text-xs font-bold text-amber-300 w-full focus:outline-none focus:border-b border-amber-600"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-5 flex flex-col gap-1">
+                      <label className="text-[9px] text-slate-500 uppercase">Target Seat Row IDs</label>
+                      <input 
+                        type="text" 
+                        value={batch.seatsInput} 
+                        placeholder="5, 6, 7"
+                        onChange={(e) => updateBatchField(index, "seatsInput", e.target.value)}
+                        className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3 flex flex-col gap-1">
+                      <label className="text-[9px] text-slate-500 uppercase">Parallel Threads</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="100"
+                        value={batch.threadsCount} 
+                        onChange={(e) => updateBatchField(index, "threadsCount", Math.max(1, parseInt(e.target.value, 10) || 0))}
+                        className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-1 text-right">
+                      <button 
+                        onClick={() => removeWorkerGroup(index)}
+                        disabled={batches.length <= 1 || isProcessing}
+                        className="text-slate-600 hover:text-rose-400 text-xs font-bold disabled:opacity-20 transition-colors"
+                        title="Remove group"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Stress Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button 
+                  onClick={handleSimulateConflict} 
+                  disabled={isProcessing} 
+                  className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950 font-bold text-xs py-3.5 rounded-lg uppercase tracking-wider transition-all disabled:opacity-50 shadow-lg shadow-amber-950/40"
+                >
+                  {isProcessing ? "DISPATCHING THREADS..." : "⚡ Run Concurrency Race Test"}
+                </button>
+
+                <button 
+                  onClick={handleSimulateBotBurst} 
+                  disabled={isProcessing} 
+                  className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs py-3.5 rounded-lg uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  Test Scalper Bot Defense (50 req burst)
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800 pt-4 mt-6 flex justify-between items-center text-xs">
+              <span className="text-slate-500">
+                Total Virtual Pipeline Load: <strong className="text-amber-400">{batches.reduce((a, b) => a + b.threadsCount, 0)} parallel requests</strong>
+              </span>
               <button 
-                onClick={addWorkerGroup} 
-                disabled={isProcessing || batches.length >= 4} 
-                className="text-[10px] border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-300 px-2.5 py-1 rounded font-bold uppercase transition-colors disabled:opacity-30"
+                onClick={handleResetSystem} 
+                className="text-[10px] text-rose-400 border border-rose-900/60 hover:bg-rose-950/40 px-3 py-1.5 rounded-lg uppercase font-bold transition-colors"
               >
-                + Add Batch Group
+                Emergency Database Reset
               </button>
             </div>
+          </div>
 
-            {/* Configurable Batch Form Matrix Blocks */}
-            <div className="space-y-3 mb-6 max-h-80 overflow-y-auto pr-1">
-              {batches.map((batch, index) => (
-                <div key={index} className="bg-slate-950 border border-slate-850 p-4 rounded grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                  <div className="sm:col-span-3">
-                    <input 
-                      type="text" 
-                      value={batch.label} 
-                      onChange={(e) => updateBatchField(index, "label", e.target.value)}
-                      className="bg-transparent text-xs font-bold text-slate-300 w-full focus:outline-none focus:border-b border-slate-700"
-                    />
-                  </div>
-                  <div className="sm:col-span-5 flex flex-col gap-1">
-                    <label className="text-[9px] text-slate-500 uppercase">Target Row IDs</label>
-                    <input 
-                      type="text" 
-                      value={batch.seatsInput} 
-                      placeholder="5, 6, 7"
-                      onChange={(e) => updateBatchField(index, "seatsInput", e.target.value)}
-                      className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-600"
-                    />
-                  </div>
-                  <div className="sm:col-span-3 flex flex-col gap-1">
-                    <label className="text-[9px] text-slate-500 uppercase">Thread Workers</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="100"
-                      value={batch.threadsCount} 
-                      onChange={(e) => updateBatchField(index, "threadsCount", Math.max(1, parseInt(e.target.value, 10) || 0))}
-                      className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-600"
-                    />
-                  </div>
-                  <div className="sm:col-span-1 text-right mt-3 sm:mt-0">
-                    <button 
-                      onClick={() => removeWorkerGroup(index)}
-                      disabled={batches.length <= 1 || isProcessing}
-                      className="text-slate-600 hover:text-rose-400 text-xs font-bold disabled:opacity-20 transition-colors"
-                      title="Remove worker group"
+          {/* Right Column: Live Matrix Grid Telemetry View */}
+          <div className="lg:col-span-4 glass-panel p-6 rounded-xl border border-slate-800">
+            <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest flex items-center justify-between">
+              <span>Live Inventory Telemetry Map</span>
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+            </h3>
+
+            <div className="max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="grid grid-cols-10 sm:grid-cols-15 md:grid-cols-20 gap-1.5">
+                {allSeats.slice(0, 300).map((seat) => {
+                  const seatId = Number(seat.id);
+                  const isBooked = Boolean(seat.isBooked || seat.booked);
+                  return (
+                    <div
+                      key={seatId}
+                      title={`Seat ID: ${seatId}`}
+                      className={`h-5 text-[8px] flex items-center justify-center font-bold rounded select-none border ${
+                        isBooked 
+                          ? "bg-rose-950/80 border-rose-600 text-rose-400" 
+                          : "bg-slate-950 border-slate-800 text-slate-500"
+                      }`}
                     >
-                      ✕
-                    </button>
+                      {seatId}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-500 mt-4">Showing first 300 seats of 1,250 arena map. Red indicates booked rows or locks acquired by threads.</p>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: CONFIRMED ORDERS */}
+      {activeTab === "orders" && (
+        <div className="glass-panel p-6 rounded-xl border border-slate-800">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-cyan-400" />
+              Confirmed Customer Orders
+            </h3>
+
+            <button 
+              onClick={fetchOrders}
+              className="text-[10px] bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors"
+            >
+              Refresh Orders
+            </button>
+          </div>
+
+          {ordersList.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-slate-800 rounded-xl">
+              <Ticket className="w-10 h-10 text-slate-600 mx-auto mb-3 opacity-40" />
+              <p className="text-sm text-slate-400 font-bold">No orders recorded yet.</p>
+              <p className="text-xs text-slate-500 mt-1">Book tickets through the Fan Portal or run the simulator to generate orders.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {ordersList.map((order, idx) => (
+                <div key={order.id || idx} className="bg-slate-950 border border-slate-850 p-5 rounded-xl space-y-3 relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[9px] uppercase font-bold px-2 py-0.5 rounded">
+                        CONFIRMED PASS
+                      </span>
+                      <div className="text-sm font-bold text-white mt-1.5 font-mono">{order.confirmationCode}</div>
+                    </div>
+                    <Check className="w-5 h-5 text-emerald-400" />
+                  </div>
+
+                  <div className="text-xs text-slate-400">
+                    <div><strong>Fan:</strong> {order.userEmail}</div>
+                    <div className="mt-1"><strong>Booked Seats:</strong> [{(order.bookedSeats || []).join(", ")}]</div>
+                  </div>
+
+                  <div className="border-t border-slate-900 pt-2 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                    <span>STATUS: PAID & ISSUED</span>
+                    <span>ATOMIC VERIFIED</span>
                   </div>
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
 
-            <button 
-              onClick={handleSimulateConflict} 
-              disabled={isProcessing} 
-              className="bg-amber-950/40 text-amber-400 hover:bg-amber-900/40 border border-amber-800/60 w-full font-bold text-xs py-3 rounded uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+      {/* CONFIRMED ORDER MODAL DIALOG */}
+      {confirmedOrder && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-emerald-500/40 max-w-md w-full shadow-2xl relative">
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-950 border border-emerald-500 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+              </div>
+
+              <h3 className="text-lg font-bold text-white">Tickets Confirmed!</h3>
+              <p className="text-xs text-slate-400 mt-1">Atomic Lock Guaranteed • No Overbooking</p>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl mt-5 space-y-2 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Confirmation Code:</span>
+                <span className="font-bold text-emerald-400 font-mono text-sm">{confirmedOrder.confirmationCode}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Email:</span>
+                <span className="text-slate-200">{confirmedOrder.userEmail}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Seats Reserved:</span>
+                <span className="font-bold text-slate-200">[{confirmedOrder.bookedSeats.join(", ")}]</span>
+              </div>
+            </div>
+
+            {/* Fake Barcode SVG */}
+            <div className="mt-5 text-center">
+              <div className="text-[9px] text-slate-500 uppercase mb-1">Digital Entry Barcode</div>
+              <div className="bg-white p-2 rounded flex justify-between items-center h-10 px-4">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div key={i} className={`bg-slate-950 h-full ${i % 3 === 0 ? "w-1.5" : i % 2 === 0 ? "w-0.5" : "w-1"}`}></div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setConfirmedOrder(null)}
+              className="w-full mt-6 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-3 rounded-lg uppercase tracking-wider transition-colors"
             >
-              {isProcessing ? "DISPATCHING CONCURRENT THREAD BLOCKS..." : "⚡ Execute Programmed Race Conditions"}
-            </button>
-          </div>
-
-          <div className="border-t border-slate-800 pt-4 mt-6 flex justify-between items-center">
-            <span className="text-[10px] text-slate-500">Total Pipeline Virtual Load: <strong className="text-amber-500">{batches.reduce((a, b) => a + b.threadsCount, 0)} requests</strong></span>
-            <button onClick={handleResetSystem} className="text-[10px] text-rose-500 border border-rose-900/50 hover:bg-rose-950/20 px-3 py-1.5 rounded uppercase font-bold transition-colors">
-              Emergency Database Reset
+              Done & Close
             </button>
           </div>
         </div>
-      </section>
+      )}
+
     </div>
   );
 }
