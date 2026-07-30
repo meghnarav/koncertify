@@ -12,14 +12,19 @@ public class BookingService {
 
     private final SeatRepository seatRepository;
     private final OrderRepository orderRepository;
+    private final OutboxRepository outboxRepository;
     private final StringRedisTemplate redisTemplate;
 
     private static final String RELEASE_LOCK_LUA =
             "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
-    public BookingService(SeatRepository seatRepository, OrderRepository orderRepository, StringRedisTemplate redisTemplate) {
+    public BookingService(SeatRepository seatRepository, 
+                          OrderRepository orderRepository, 
+                          OutboxRepository outboxRepository,
+                          StringRedisTemplate redisTemplate) {
         this.seatRepository = seatRepository;
         this.orderRepository = orderRepository;
+        this.outboxRepository = outboxRepository;
         this.redisTemplate = redisTemplate;
     }
 
@@ -73,7 +78,15 @@ public class BookingService {
                     : "fan-" + confirmationCode.toLowerCase() + "@koncertify.io";
 
             Order order = new Order(email, confirmationCode, sortedSeatNums);
-            return orderRepository.save(order);
+            Order savedOrder = orderRepository.save(order);
+
+            // Transactional Outbox Pattern: Atomic event write inside the DB transaction
+            String payload = String.format("{\"orderId\":%d,\"userEmail\":\"%s\",\"confirmationCode\":\"%s\",\"bookedSeats\":%s}", 
+                    savedOrder.getId(), savedOrder.getUserEmail(), savedOrder.getConfirmationCode(), sortedSeatNums.toString());
+            OutboxMessage outboxMessage = new OutboxMessage("ORDER", savedOrder.getConfirmationCode(), "ORDER_CREATED", payload);
+            outboxRepository.save(outboxMessage);
+
+            return savedOrder;
 
         } finally {
             // Safe release of Redis locks via Lua Script matching unique ownership token

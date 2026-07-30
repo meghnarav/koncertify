@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react";
 import { 
   ShieldCheck, ShieldAlert, Cpu, Zap, Ticket, Layers, 
   RefreshCw, Lock, CheckCircle2, AlertTriangle, Users, 
-  Terminal, Activity, Sparkles, Check, Server
+  Terminal, Activity, Sparkles, Check, Server, Search,
+  Calendar, MapPin, Clock, ArrowRight, Filter, ExternalLink
 } from "lucide-react";
 
 interface SeatData {
@@ -39,16 +40,91 @@ interface SimulatorBatch {
   threadsCount: number;
 }
 
+interface ConcertEvent {
+  id: number;
+  title: string;
+  artist: string;
+  category: "POP" | "ROCK" | "EDM" | "FESTIVAL";
+  date: string;
+  venue: string;
+  location: string;
+  startingPrice: number;
+  totalSeats: number;
+  imageBg: string;
+  featured?: boolean;
+}
+
+const FEATURED_EVENTS: ConcertEvent[] = [
+  {
+    id: 1,
+    title: "Koncertify Summer Fest 2026",
+    artist: "The Weeknd, Dua Lipa & Guests",
+    category: "FESTIVAL",
+    date: "August 28, 2026 • 7:00 PM",
+    venue: "Grand Arena Stadium",
+    location: "Los Angeles, CA",
+    startingPrice: 120,
+    totalSeats: 1250,
+    imageBg: "from-purple-900/60 via-slate-900 to-slate-950",
+    featured: true
+  },
+  {
+    id: 2,
+    title: "Eras World Tour 2026",
+    artist: "Taylor Swift",
+    category: "POP",
+    date: "September 14, 2026 • 8:00 PM",
+    venue: "MetLife Stadium",
+    location: "East Rutherford, NJ",
+    startingPrice: 180,
+    totalSeats: 1250,
+    imageBg: "from-pink-900/60 via-slate-900 to-slate-950"
+  },
+  {
+    id: 3,
+    title: "M72 World Tour",
+    artist: "Metallica",
+    category: "ROCK",
+    date: "October 02, 2026 • 7:30 PM",
+    venue: "SoFi Stadium",
+    location: "Inglewood, CA",
+    startingPrice: 150,
+    totalSeats: 1250,
+    imageBg: "from-amber-900/60 via-slate-900 to-slate-950"
+  },
+  {
+    id: 4,
+    title: "Music of the Spheres",
+    artist: "Coldplay",
+    category: "POP",
+    date: "November 19, 2026 • 8:00 PM",
+    venue: "Wembley Stadium",
+    location: "London, UK",
+    startingPrice: 140,
+    totalSeats: 1250,
+    imageBg: "from-teal-900/60 via-slate-900 to-slate-950"
+  }
+];
+
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"portal" | "simulator" | "orders">("portal");
+  const [activeTab, setActiveTab] = useState<"discovery" | "portal" | "simulator" | "orders">("discovery");
+  const [selectedEvent, setSelectedEvent] = useState<ConcertEvent>(FEATURED_EVENTS[0]);
   const [backendStatus, setBackendStatus] = useState<"checking..." | "CONNECTED" | "OFFLINE" | "ERROR">("checking...");
   const [botProtection, setBotProtection] = useState<boolean>(true);
   const [allSeats, setAllSeats] = useState<SeatData[]>([]);
   const [selectedSeatIds, setSelectedSeatIds] = useState<number[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [idempotencyKey, setIdempotencyKey] = useState<string>("");
   const [confirmedOrder, setConfirmedOrder] = useState<OrderData | null>(null);
   const [ordersList, setOrdersList] = useState<OrderData[]>([]);
   
+  // Hold Timer state (10-minute hold window)
+  const [holdTimeSeconds, setHoldTimeSeconds] = useState<number>(600);
+
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+
   const [stats, setStats] = useState<DashboardStats>({
     activeBookings: 0,
     availableSeats: 1250,
@@ -72,7 +148,18 @@ export default function Home() {
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:10000";
 
-  // Fetch metrics & seat state from backend
+  // Hold Timer countdown effect
+  useEffect(() => {
+    if (selectedSeatIds.length === 0) {
+      setHoldTimeSeconds(600);
+      return;
+    }
+    const timer = setInterval(() => {
+      setHoldTimeSeconds(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [selectedSeatIds]);
+
   const fetchMetrics = async () => {
     try {
       const startTime = performance.now();
@@ -95,8 +182,8 @@ export default function Home() {
         p50LatencyMs: Math.max(3, Math.min(latency, 25)),
         p99LatencyMs: Math.max(12, Math.min(latency * 2, 85))
       }));
-    } catch (err) {
-      console.error("Failed to sync metrics from backend.");
+    } catch {
+      console.error("Failed to sync metrics.");
     }
   };
 
@@ -108,7 +195,7 @@ export default function Home() {
         setOrdersList(data);
       }
     } catch {
-      // Ignore fallback
+      // Fallback
     }
   };
 
@@ -140,7 +227,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Toggle Bot Protection Filter
   const toggleBotProtection = async () => {
     const nextState = !botProtection;
     try {
@@ -157,7 +243,6 @@ export default function Home() {
     }
   };
 
-  // Toggle Seat Selection for Buyer
   const handleSeatClick = (seatId: number, isBooked: boolean) => {
     if (isBooked) return;
     if (selectedSeatIds.includes(seatId)) {
@@ -171,7 +256,6 @@ export default function Home() {
     }
   };
 
-  // Quick Select Seats
   const quickSelectSeats = (count: number, section?: string) => {
     let candidateSeats = allSeats.filter(s => !(s.isBooked || s.booked));
     if (section === "VIP") candidateSeats = candidateSeats.filter(s => s.id <= 250);
@@ -182,7 +266,6 @@ export default function Home() {
     setSelectedSeatIds(picked);
   };
 
-  // Execute Fan Ticket Checkout
   const handleFanCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedSeatIds.length === 0) return;
@@ -190,10 +273,15 @@ export default function Home() {
     setIsProcessing(true);
     setActionMessage(null);
 
+    const key = idempotencyKey.trim() || `ik-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
     try {
       const res = await fetch(`${baseUrl}/api/bookings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Idempotency-Key": key
+        },
         body: JSON.stringify({
           email: userEmail || `fan-${Math.floor(Math.random()*10000)}@koncertify.io`,
           seatNums: selectedSeatIds
@@ -206,8 +294,9 @@ export default function Home() {
         setConfirmedOrder(responseData);
         setSelectedSeatIds([]);
         setUserEmail("");
+        setIdempotencyKey("");
         setActionMessage({
-          text: `Success! Confirmed Order ${responseData.confirmationCode} for seats [${responseData.bookedSeats.join(", ")}].`,
+          text: `Success! Confirmed Order ${responseData.confirmationCode} for seats [${responseData.bookedSeats.join(", ")}]. (Idempotency Key: ${key})`,
           isError: false
         });
         fetchMetrics();
@@ -226,7 +315,6 @@ export default function Home() {
     }
   };
 
-  // Execute Concurrent Worker Load Simulation
   const handleSimulateConflict = async () => {
     setIsProcessing(true);
     setActionMessage({ text: "Dispatching multi-group concurrent transactional threads...", isError: false });
@@ -321,7 +409,6 @@ export default function Home() {
     }
   };
 
-  // Trigger Scalper Bot Burst Test
   const handleSimulateBotBurst = async () => {
     setIsProcessing(true);
     setActionMessage({ text: "Firing 50 rapid-fire automated bot requests in 500ms...", isError: false });
@@ -359,7 +446,6 @@ export default function Home() {
     setTimeout(() => setStats(prev => ({ ...prev, systemLoad: "Normal", requestsPerSec: 0 })), 2500);
   };
 
-  // Reset Database State
   const handleResetSystem = async () => {
     if (!window.confirm("Reset all operational seats and clear database locks?")) return;
     setIsProcessing(true);
@@ -377,7 +463,6 @@ export default function Home() {
     }
   };
 
-  // Batch group helpers
   const updateBatchField = (index: number, field: keyof SimulatorBatch, value: any) => {
     const updated = [...batches];
     updated[index] = { ...updated[index], [field]: value };
@@ -413,6 +498,20 @@ export default function Home() {
 
   const totalPrice = selectedSeatIds.reduce((sum, id) => sum + getSeatPrice(id), 0);
 
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const displayedEvents = FEATURED_EVENTS.filter(evt => {
+    const matchesSearch = evt.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          evt.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          evt.venue.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = categoryFilter === "ALL" || evt.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-10 font-mono select-none">
       
@@ -422,11 +521,11 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-6 h-6 text-emerald-400 animate-pulse" />
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-amber-400">
-              KONCERTIFY CORE ENGINE v2.0
+              KONCERTIFY DISTRIBUTED PLATFORM v3.0
             </h1>
           </div>
           <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
-            <span>High-Concurrency Ticket Engine</span>
+            <span>High-Concurrency Booking Engine</span>
             <span>•</span>
             <span>Deterministic Row Locks & Redis Redlock Safety</span>
           </p>
@@ -436,7 +535,7 @@ export default function Home() {
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="bg-slate-900/90 border border-slate-800 px-3 py-2 rounded-lg flex items-center gap-2">
             <Server className="w-4 h-4 text-slate-400" />
-            <span className="text-slate-400">Backend:</span>
+            <span className="text-slate-400">Engine:</span>
             <span className={`font-bold ${backendStatus === "CONNECTED" ? "text-emerald-400" : "text-rose-400"}`}>
               {backendStatus}
             </span>
@@ -460,6 +559,18 @@ export default function Home() {
       {/* Main Tab Navigation */}
       <div className="flex border-b border-slate-800 mb-8 overflow-x-auto">
         <button
+          onClick={() => setActiveTab("discovery")}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "discovery"
+              ? "border-purple-400 text-purple-400 bg-slate-900/50"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Search className="w-4 h-4" />
+          Concert Discovery & Events
+        </button>
+
+        <button
           onClick={() => setActiveTab("portal")}
           className={`flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap ${
             activeTab === "portal"
@@ -468,7 +579,7 @@ export default function Home() {
           }`}
         >
           <Ticket className="w-4 h-4" />
-          Fan Ticket Buyer Portal
+          Interactive Venue Map ({selectedEvent.title.split(' ')[0]})
         </button>
 
         <button
@@ -480,7 +591,7 @@ export default function Home() {
           }`}
         >
           <Cpu className="w-4 h-4" />
-          Concurrency & Load Simulator
+          Concurrency Simulator
         </button>
 
         <button
@@ -492,7 +603,7 @@ export default function Home() {
           }`}
         >
           <Layers className="w-4 h-4" />
-          Confirmed Orders ({ordersList.length})
+          Confirmed Passes ({ordersList.length})
         </button>
       </div>
 
@@ -518,7 +629,7 @@ export default function Home() {
 
         <div className="glass-panel p-3.5 rounded-lg">
           <div className="text-[10px] text-slate-500 uppercase flex items-center justify-between">
-            <span>Race Conflicts Caught</span>
+            <span>Race Conflicts</span>
             <Lock className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="text-sm font-bold text-rose-400 mt-1">{stats.conflictsDetected}</div>
@@ -549,7 +660,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Global Status Banner Notification */}
+      {/* Notification Banner */}
       {actionMessage && (
         <div className={`mb-6 p-4 rounded-lg text-xs border flex items-center justify-between gap-3 ${
           actionMessage.isError 
@@ -561,6 +672,120 @@ export default function Home() {
             <span className="font-semibold">{actionMessage.text}</span>
           </div>
           <button onClick={() => setActionMessage(null)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+        </div>
+      )}
+
+      {/* TAB 0: CONCERT DISCOVERY & EVENTS */}
+      {activeTab === "discovery" && (
+        <div className="space-y-8">
+          {/* Featured Hero Banner */}
+          <div className="glass-panel p-8 rounded-2xl relative overflow-hidden bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/90 border border-purple-800/40 shadow-2xl">
+            <div className="relative z-10 max-w-2xl">
+              <span className="bg-purple-900/80 text-purple-300 border border-purple-700/80 text-[10px] uppercase font-bold px-3 py-1 rounded-full">
+                FEATURED HIGH-DEMAND CONCERT DROP
+              </span>
+              <h2 className="text-2xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
+                {FEATURED_EVENTS[0].title}
+              </h2>
+              <p className="text-sm text-purple-200 mt-2 font-semibold">{FEATURED_EVENTS[0].artist}</p>
+              
+              <div className="flex flex-wrap gap-4 mt-6 text-xs text-slate-300">
+                <div className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-purple-400" /> {FEATURED_EVENTS[0].date}</div>
+                <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-purple-400" /> {FEATURED_EVENTS[0].venue}, {FEATURED_EVENTS[0].location}</div>
+              </div>
+
+              <div className="mt-8 flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    setSelectedEvent(FEATURED_EVENTS[0]);
+                    setActiveTab("portal");
+                  }}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-bold text-xs px-6 py-3.5 rounded-xl uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-purple-950/60"
+                >
+                  <span>Book Seats Now</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <div className="text-xs text-slate-400 font-mono">
+                  Starting at <strong className="text-white text-base">${FEATURED_EVENTS[0].startingPrice}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Category Filter Bar */}
+          <div className="glass-panel p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Search artist, concert, or venue..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs text-slate-400 font-bold uppercase">Category:</span>
+              {(["ALL", "FESTIVAL", "POP", "ROCK", "EDM"] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                    categoryFilter === cat
+                      ? "bg-purple-600 text-white border-purple-400"
+                      : "bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Events Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {displayedEvents.map(evt => (
+              <div 
+                key={evt.id} 
+                className="glass-panel rounded-xl overflow-hidden border border-slate-800 flex flex-col justify-between hover:border-purple-500/60 transition-all group"
+              >
+                <div className={`p-6 bg-gradient-to-b ${evt.imageBg}`}>
+                  <span className="bg-slate-900/90 text-purple-300 border border-purple-800/60 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+                    {evt.category}
+                  </span>
+                  <h3 className="text-base font-bold text-white mt-3 group-hover:text-purple-300 transition-colors">{evt.title}</h3>
+                  <p className="text-xs text-slate-400 mt-1 font-semibold">{evt.artist}</p>
+                </div>
+
+                <div className="p-6 bg-slate-950/90 border-t border-slate-900 space-y-3">
+                  <div className="text-[11px] text-slate-400 space-y-1">
+                    <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" /> {evt.date}</div>
+                    <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-purple-400 shrink-0" /> {evt.venue}</div>
+                  </div>
+
+                  <div className="border-t border-slate-900 pt-3 flex justify-between items-center">
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase">From</div>
+                      <div className="text-sm font-bold text-emerald-400">${evt.startingPrice}</div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSelectedEvent(evt);
+                        setActiveTab("portal");
+                      }}
+                      className="bg-purple-900/50 hover:bg-purple-800/60 text-purple-200 border border-purple-700/60 font-bold text-[11px] px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5"
+                    >
+                      <span>Select Seats</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -577,19 +802,19 @@ export default function Home() {
                   <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px] uppercase font-bold px-2.5 py-1 rounded-full">
                     LIVE TICKETING SALE
                   </span>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white mt-2">Koncertify Summer Fest 2026</h2>
-                  <p className="text-xs text-slate-400 mt-1">Grand Arena Stadium • August 28, 2026</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white mt-2">{selectedEvent.title}</h2>
+                  <p className="text-xs text-slate-400 mt-1">{selectedEvent.artist} • {selectedEvent.venue}</p>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-400">Tickets starting from</div>
-                  <div className="text-2xl font-extrabold text-emerald-400">$120</div>
+                  <div className="text-2xl font-extrabold text-emerald-400">${selectedEvent.startingPrice}</div>
                 </div>
               </div>
 
               {/* Stage Visual representation */}
               <div className="mt-8 border-t border-slate-800/80 pt-6">
                 <div className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white tracking-widest uppercase shadow-lg shadow-purple-900/30 mb-6">
-                  ⚡ STAGE / PERFORMANCE AREA ⚡
+                  ⚡ MAIN PERFORMANCE STAGE ⚡
                 </div>
 
                 {/* Section Filter Pills */}
@@ -683,29 +908,38 @@ export default function Home() {
           <div className="lg:col-span-4 space-y-6">
             <div className="glass-panel p-6 rounded-xl border border-slate-800 h-full flex flex-col justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <Ticket className="w-4 h-4 text-emerald-400" />
-                  Your Order Selection
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                    <Ticket className="w-4 h-4 text-emerald-400" />
+                    Your Ticket Cart
+                  </h3>
+
+                  {selectedSeatIds.length > 0 && (
+                    <div className="flex items-center gap-1 text-[10px] text-amber-400 font-bold bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded">
+                      <Clock className="w-3 h-3" />
+                      <span>Hold Expiry: {formatTime(holdTimeSeconds)}</span>
+                    </div>
+                  )}
+                </div>
 
                 {selectedSeatIds.length === 0 ? (
                   <div className="text-center py-10 border border-dashed border-slate-800 rounded-xl">
                     <Ticket className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
-                    <p className="text-xs text-slate-500">Click seats on the arena map to begin checkout.</p>
+                    <p className="text-xs text-slate-500">Click seats on the venue map to reserve seats.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="bg-slate-950 p-4 rounded-lg border border-slate-850 space-y-2 max-h-48 overflow-y-auto">
                       {selectedSeatIds.map(id => (
                         <div key={id} className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-200">Seat #{id}</span>
+                          <span className="font-bold text-slate-200">Seat #{id} ({id <= 250 ? "VIP" : id <= 750 ? "Floor" : "Gallery"})</span>
                           <span className="text-slate-400">${getSeatPrice(id)}</span>
                         </div>
                       ))}
                     </div>
 
                     <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-sm font-bold">
-                      <span className="text-slate-300">Total Price:</span>
+                      <span className="text-slate-300">Total Amount:</span>
                       <span className="text-emerald-400 text-lg">${totalPrice}</span>
                     </div>
 
@@ -721,23 +955,33 @@ export default function Home() {
                         />
                       </div>
 
+                      <div>
+                        <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Idempotency-Key (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. ik-9a8b7c6d (Auto-generated if empty)"
+                          value={idempotencyKey}
+                          onChange={(e) => setIdempotencyKey(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-400 font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
                       <button
                         type="submit"
                         disabled={isProcessing}
                         className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs py-3.5 rounded-lg uppercase tracking-wider transition-all disabled:opacity-50 shadow-lg shadow-emerald-950/50"
                       >
-                        {isProcessing ? "Acquiring Atomic Locks..." : "🔒 Complete Atomic Checkout"}
+                        {isProcessing ? "Acquiring Row Locks..." : "🔒 Complete Idempotent Purchase"}
                       </button>
                     </form>
                   </div>
                 )}
               </div>
 
-              {/* Security info footer */}
               <div className="mt-8 border-t border-slate-800/80 pt-4 text-[10px] text-slate-500 space-y-1">
                 <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  Atomic Multi-Row Pessimistic Guarantee
+                  Transactional Outbox & Idempotency Protected
                 </div>
                 <p>Transactions are validated atomically. Double-allocations are impossible under high concurrency.</p>
               </div>
@@ -896,14 +1140,14 @@ export default function Home() {
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
               <Layers className="w-4 h-4 text-cyan-400" />
-              Confirmed Customer Orders
+              Confirmed Customer Passes
             </h3>
 
             <button 
               onClick={fetchOrders}
               className="text-[10px] bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors"
             >
-              Refresh Orders
+              Refresh Passes
             </button>
           </div>
 
@@ -927,13 +1171,13 @@ export default function Home() {
                     <Check className="w-5 h-5 text-emerald-400" />
                   </div>
 
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-slate-400 space-y-1">
                     <div><strong>Fan:</strong> {order.userEmail}</div>
-                    <div className="mt-1"><strong>Booked Seats:</strong> [{(order.bookedSeats || []).join(", ")}]</div>
+                    <div><strong>Booked Seats:</strong> [{(order.bookedSeats || []).join(", ")}]</div>
                   </div>
 
                   <div className="border-t border-slate-900 pt-2 flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                    <span>STATUS: PAID & ISSUED</span>
+                    <span>STATUS: PAID & OUTBOX EVENT CREATED</span>
                     <span>ATOMIC VERIFIED</span>
                   </div>
                 </div>
@@ -953,7 +1197,7 @@ export default function Home() {
               </div>
 
               <h3 className="text-lg font-bold text-white">Tickets Confirmed!</h3>
-              <p className="text-xs text-slate-400 mt-1">Atomic Lock Guaranteed • No Overbooking</p>
+              <p className="text-xs text-slate-400 mt-1">Transactional Outbox Event Dispatched</p>
             </div>
 
             <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl mt-5 space-y-2 text-xs">
@@ -971,7 +1215,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Fake Barcode SVG */}
+            {/* Barcode Display */}
             <div className="mt-5 text-center">
               <div className="text-[9px] text-slate-500 uppercase mb-1">Digital Entry Barcode</div>
               <div className="bg-white p-2 rounded flex justify-between items-center h-10 px-4">

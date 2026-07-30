@@ -19,8 +19,11 @@ public class Seat {
     private String seatLabel;
     
     @Column(name = "is_booked", nullable = false)
-    @JsonProperty("isBooked") // Forces Jackson to output "isBooked" in JSON
+    @JsonProperty("isBooked")
     private boolean isBooked = false;
+
+    @Version
+    private Long version;
 
     @ManyToOne
     @JoinColumn(name = "event_id")
@@ -55,7 +58,10 @@ public class Seat {
     
     public boolean isBooked() { return isBooked; }
     public void setBooked(boolean booked) { this.isBooked = booked; }
-    
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
+
     public Event getEvent() { return event; }
     public void setEvent(Event event) { this.event = event; }
 }
