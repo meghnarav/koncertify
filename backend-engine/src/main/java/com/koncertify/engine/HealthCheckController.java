@@ -1,4 +1,4 @@
-package com.koncertify.engine.controller;
+package com.koncertify.engine;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

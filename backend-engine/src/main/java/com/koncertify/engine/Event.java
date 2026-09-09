@@ -1,5 +1,6 @@
 package com.koncertify.engine;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,7 +15,8 @@ public class Event {
     private String title;
     private LocalDateTime eventDate;
 
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    @JsonIgnore
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Seat> seats;
 
     // Constructors
