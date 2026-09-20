@@ -119,7 +119,7 @@ Head to http://localhost:3000 to mess around with the concurrency playground loc
 ---
 
 ## Status
-🚧 Active Development — Summer 2026
+🚧 Active Development - 2026
 
 ---
 
